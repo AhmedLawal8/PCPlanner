@@ -1,0 +1,95 @@
+PCPlanner - Critical Fields Per Component Table
+(source: raw_data/*.json, scraped from PCPartPicker via docyx/pc-part-dataset)
+
+CPU (raw_data/cpu.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  core_count           INTEGER
+  tdp                  INTEGER     -- sizes cooler/PSU
+  microarchitecture    TEXT
+  socket               TEXT        -- NOT in scraped data; derive from microarchitecture
+                                    -- using the lookup table below at import time
+  optional: core_clock, boost_clock, graphics
+
+  Microarchitecture -> Socket lookup (last ~8 years / 2018+ only; anything
+  older gets socket = NULL, since nobody's building a new PC around it):
+
+    Zen 5                 -> AM5
+    Zen 4                 -> AM5
+    Zen 3                 -> AM4
+    Zen 2                 -> AM4
+    Zen+                  -> AM4
+    Arrow Lake             -> LGA1851
+    Raptor Lake Refresh    -> LGA1700
+    Raptor Lake            -> LGA1700
+    Alder Lake             -> LGA1700
+    Rocket Lake            -> LGA1200
+    Comet Lake             -> LGA1200
+    Coffee Lake Refresh    -> LGA1151 (rev2)
+
+    everything else (Zen, Coffee Lake, Kaby Lake, Skylake, Haswell,
+    Broadwell, Wolfdale, Ivy Bridge, Sandy Bridge, Cascade Lake, Core,
+    K10, Bulldozer, Nehalem, Yorkfield, Westmere, Jaguar, Puma+,
+    Steamroller, Excavator, Lynx, Piledriver) -> NULL
+
+MOTHERBOARD (raw_data/motherboard.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  socket               TEXT        -- match vs CPU
+  form_factor          TEXT        -- match vs case
+  max_memory           INTEGER     -- match vs total RAM capacity
+  memory_slots         INTEGER     -- match vs number of RAM modules
+  optional: color
+
+MEMORY (raw_data/memory.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  speed_gen            INTEGER     -- speed[0], DDR generation, match vs motherboard
+  speed_mhz            INTEGER     -- speed[1]
+  module_count         INTEGER     -- modules[0]
+  module_size_gb       INTEGER     -- modules[1]
+  cas_latency          REAL
+  optional: color, first_word_latency, price_per_gb (derivable, skip storing)
+
+INTERNAL HARD DRIVE (raw_data/internal-hard-drive.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  capacity             INTEGER     -- GB
+  type                 TEXT        -- SSD or HDD RPM
+  form_factor          TEXT        -- match vs motherboard/case
+  interface            TEXT        -- M.2/SATA/PCIe, match vs motherboard
+  optional: cache, price_per_gb (derivable, skip storing)
+
+VIDEO CARD (raw_data/video-card.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  chipset              TEXT
+  memory               INTEGER     -- GB
+  length               INTEGER     -- mm, match vs case clearance
+  optional: core_clock, boost_clock, color
+
+CASE (raw_data/case.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  type                 TEXT        -- form factor supported, match vs motherboard
+  psu                  INTEGER     -- wattage of bundled PSU, if any (null = none)
+  internal_35_bays     INTEGER     -- match vs storage drive count
+  optional: color, side_panel, external_volume
+
+POWER SUPPLY (raw_data/power-supply.json)
+  id                   INTEGER PK AUTOINCREMENT
+  name                 TEXT
+  price                REAL
+  type                 TEXT        -- ATX/SFX, match vs case
+  wattage              INTEGER     -- must exceed system draw
+  modular              TEXT        -- Full/Semi/false
+  optional: efficiency, color
+
+Fields marked "optional" are display/comparison sugar, not needed for
+compatibility checks. Safe to add later without touching core logic.
