@@ -3,7 +3,7 @@ import os
 
 from app import app
 from models.db import db
-from models.models import CPU, Motherboard, GPU, RAM, Storage, PSU, Case
+from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case
 
 
 RAW_DATA_DIR = os.path.join(os.path.dirname(__file__), "raw_data")
