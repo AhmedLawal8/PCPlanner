@@ -13,7 +13,13 @@ SessionLocal = sessionmaker(bind=engine)
 
 Base = declarative_base()
 
+class Users(Base):
+    __tablename__ = "users"
 
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+  
 class CPU(Base):
     __tablename__ = "cpus"
 
