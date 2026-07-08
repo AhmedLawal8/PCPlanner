@@ -13,10 +13,13 @@ def create_app():
         "sqlite:///" + os.path.join(app.instance_path, "pcbuilder.db")
     )
     app.config["SECRET_KEY"] = SECRET_KEY
-    
+
     db.init_app(app)
     from auth.routes import auth_bp
     app.register_blueprint(auth_bp)
 
-
     return app
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(debug=True)
