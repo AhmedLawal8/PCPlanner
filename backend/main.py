@@ -1,6 +1,6 @@
 from app import create_app
 from models.db import db
-from user_auth import create_account, verify_login
+from backend.auth.user_auth import create_account, verify_login
 
 
 def sign_up_flow():
