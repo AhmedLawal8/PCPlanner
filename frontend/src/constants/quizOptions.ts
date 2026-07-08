@@ -6,7 +6,7 @@ export interface QuizAnswers {
 
 export const USE_CASE_OPTIONS = [
   { value: 'gaming', label: 'Gaming' },
-  { value: 'video-editing', label: 'Video Editing' },
+  { value: 'video-editing', label: 'Creativity/Production' },
   { value: 'general-use', label: 'General Use' },
   { value: 'streaming', label: 'Streaming' },
 ]
