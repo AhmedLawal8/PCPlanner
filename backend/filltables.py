@@ -3,7 +3,7 @@ import os
 
 from app import create_app
 from models.db import db
-from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case
+from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case, Cooler
 
 app = create_app()
 
@@ -118,10 +118,32 @@ def build_cases():
     return rows
 
 
+def average_if_range(value):
+    # rpm/noise_level are sometimes a [min, max] range instead of a single
+    # number; collapse that down to one representative value.
+    if isinstance(value, list):
+        return sum(value) / len(value)
+    return value
+
+
+def build_coolers():
+    rows = []
+    for item in load("cpu-cooler.json"):
+        rows.append({
+            "name": item["name"],
+            "price": item["price"],
+            "rpm": average_if_range(item.get("rpm")),
+            "noise_level": average_if_range(item.get("noise_level")),
+            "color": item.get("color"),
+            "radiator_size": item.get("size"),
+        })
+    return rows
+
+
 def main():
     with app.app_context():
         db.create_all()
-        for model in (CPU, Motherboard, GPU, RAM, Storage, PSU, Case):
+        for model in (CPU, Motherboard, GPU, RAM, Storage, PSU, Case, Cooler):
             db.session.query(model).delete()
 
         db.session.bulk_insert_mappings(CPU, build_cpus())
@@ -131,6 +153,7 @@ def main():
         db.session.bulk_insert_mappings(Storage, build_storages())
         db.session.bulk_insert_mappings(PSU, build_psus())
         db.session.bulk_insert_mappings(Case, build_cases())
+        db.session.bulk_insert_mappings(Cooler, build_coolers())
 
         db.session.commit()
         print("Database complete.")

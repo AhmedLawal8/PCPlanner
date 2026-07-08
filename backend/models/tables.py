@@ -85,3 +85,17 @@ class Case(db.Model):
     price = db.Column(db.Float)
     case_type = db.Column(db.String)
     color = db.Column(db.String)
+
+class Cooler(db.Model):
+    __tablename__ = "coolers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, index=True)
+    price = db.Column(db.Float)
+    rpm = db.Column(db.Float)
+    noise_level = db.Column(db.Float)
+    color = db.Column(db.String)
+    radiator_size = db.Column(db.Integer)
+    # radiator_size is null for air coolers; only AIO/liquid coolers report it.
+    # No socket data in the source dataset, so we treat coolers as universally
+    # compatible (modern coolers ship with multi-socket mounting hardware).
