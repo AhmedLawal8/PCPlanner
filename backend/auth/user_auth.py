@@ -25,13 +25,13 @@ def create_account(username, plain_password):
     Create a new user account.
     """
     if get_user(username) is not None:
-        return {"error": "Username already taken."}
+        raise ValueError("Username already taken.")
     
     try:
         user = Users(username=username, hashed_password=hash_password(plain_password))
         db.session.add(user)
         db.session.commit()
-        return {"message": "Account created successfully."}
+        return user
     except Exception:
         db.session.rollback()  # clears the broken session state
         raise  # let Flask return a 500
@@ -42,10 +42,9 @@ def verify_login(username, plain_password):
     """
     user = get_user(username)
     if user is None:
-        return False
-    return bcrypt.checkpw(
-        plain_password.encode("utf-8"),
-        user.hashed_password.encode("utf-8")
-    )
+        return None
+    if not bcrypt.checkpw(plain_password.encode("utf-8"), user.hashed_password.encode("utf-8")):
+        return None
+    return user
 
        

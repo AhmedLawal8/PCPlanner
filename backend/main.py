@@ -1,6 +1,6 @@
 from app import create_app
 from generate_build import generate_build
-from user_auth import create_account, verify_login
+from auth.user_auth import create_account, verify_login
 
 USE_CASES = {
     "1": "gaming",
