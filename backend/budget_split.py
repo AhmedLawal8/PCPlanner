@@ -58,7 +58,9 @@ def allocate_budget(total_budget, use_case):
 
     if use_case not in BUDGET_SPLITS:
         valid = ", ".join(BUDGET_SPLITS.keys())
-        raise ValueError(f"Unknown use case '{use_case}'. Valid options: {valid}")
+        raise ValueError(
+            f"Unknown use case '{use_case}'. Valid options: {valid}")
 
     percentages = BUDGET_SPLITS[use_case]
-    return {category: round(total_budget * pct, 2) for category, pct in percentages.items()}
+    return {category: round(total_budget * pct, 2)
+            for category, pct in percentages.items()}

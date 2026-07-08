@@ -3,7 +3,9 @@ import os
 
 from app import create_app
 from models.db import db
-from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case, Cooler
+from models.tables import (
+    CPU, Motherboard, GPU, RAM, Storage, PSU, Case, Cooler,
+)
 
 app = create_app()
 
@@ -11,8 +13,8 @@ RAW_DATA_DIR = os.path.join(os.path.dirname(__file__), "raw_data")
 
 
 def load(filename):
-    #helper function to load a JSON file from the raw_data directory 
-    #for every table respectively 
+    # helper function to load a JSON file from the raw_data directory
+    # for every table respectively
     with open(os.path.join(RAW_DATA_DIR, filename), encoding="utf-8") as f:
         return json.load(f)
 
@@ -69,7 +71,8 @@ def build_rams():
     for item in load("memory.json"):
         speed = item.get("speed") or [None, None]
         modules = item.get("modules") or [None, None]
-        gen, mhz = speed #the dictionary value for this one gives two values we need split.
+        # the dictionary value for this one gives two values we need split.
+        gen, mhz = speed
         module_count, module_size = modules
         capacity = module_count * module_size if module_count and module_size else None
         rows.append({
