@@ -1,10 +1,11 @@
 import json
 import os
 
-from app import app
+from app import create_app
 from models.db import db
 from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case
 
+app = create_app()
 
 RAW_DATA_DIR = os.path.join(os.path.dirname(__file__), "raw_data")
 
