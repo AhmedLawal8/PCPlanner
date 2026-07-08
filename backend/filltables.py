@@ -28,7 +28,8 @@ def build_cpus():
             "base_clock": item.get("core_clock"),
             "boost_clock": item.get("boost_clock"),
             "wattage": item.get("tdp"),
-            "socket": None,  # not present in scraped data; see db.py note
+            "socket": None,  # backfilled by scripts/enrich_compat.py
+            "microarchitecture": item.get("microarchitecture"),
         })
     return rows
 
