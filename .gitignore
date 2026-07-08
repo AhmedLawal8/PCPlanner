@@ -5,3 +5,5 @@ __pycache__/
 venv/
 schema-fields.txt
 instance/
+*.db
+gemini_call.py
