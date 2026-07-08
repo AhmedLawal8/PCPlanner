@@ -1,7 +1,10 @@
 import json
 import os
 
-from db import Base, CPU, Case, GPU, Motherboard, PSU, RAM, SessionLocal, Storage, engine
+from app import app
+from models.db import db
+from models.tables import CPU, Motherboard, GPU, RAM, Storage, PSU, Case
+
 
 RAW_DATA_DIR = os.path.join(os.path.dirname(__file__), "raw_data")
 
@@ -72,7 +75,7 @@ def build_rams():
             "price": item["price"],
             "capacity": capacity,
             "speed": mhz,
-            "type": f"DDR{gen}" if gen else None,
+            "memory_type": f"DDR{gen}" if gen else None,
         })
     return rows
 
@@ -84,7 +87,7 @@ def build_storages():
             "name": item["name"],
             "price": item["price"],
             "capacity": item.get("capacity"),
-            "type": item.get("type"),
+            "drive_type": item.get("type"),
             "interface": item.get("interface"),
         })
     return rows
@@ -108,34 +111,28 @@ def build_cases():
         rows.append({
             "name": item["name"],
             "price": item["price"],
-            "type": item.get("type"),
+            "case_type": item.get("type"),
             "color": item.get("color"),
         })
     return rows
 
 
 def main():
-    Base.metadata.create_all(engine)
-
-    session = SessionLocal()
-    try:
+    with app.app_context():
+        db.create_all()
         for model in (CPU, Motherboard, GPU, RAM, Storage, PSU, Case):
-            session.query(model).delete() 
-            # delete all existing rows in the table before inserting new data
-            # in case someone wants to run scraper again to update the data,
-            #  we don't want duplicates.
+            db.session.query(model).delete()
 
-        session.bulk_insert_mappings(CPU, build_cpus())
-        session.bulk_insert_mappings(Motherboard, build_motherboards())
-        session.bulk_insert_mappings(GPU, build_gpus())
-        session.bulk_insert_mappings(RAM, build_rams())
-        session.bulk_insert_mappings(Storage, build_storages())
-        session.bulk_insert_mappings(PSU, build_psus())
-        session.bulk_insert_mappings(Case, build_cases())
-        session.commit()
-        print("Import complete.")
-    finally:
-        session.close()
+        db.session.bulk_insert_mappings(CPU, build_cpus())
+        db.session.bulk_insert_mappings(Motherboard, build_motherboards())
+        db.session.bulk_insert_mappings(GPU, build_gpus())
+        db.session.bulk_insert_mappings(RAM, build_rams())
+        db.session.bulk_insert_mappings(Storage, build_storages())
+        db.session.bulk_insert_mappings(PSU, build_psus())
+        db.session.bulk_insert_mappings(Case, build_cases())
+
+        db.session.commit()
+        print("Database complete.")
 
 
 if __name__ == "__main__":
