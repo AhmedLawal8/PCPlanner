@@ -49,7 +49,8 @@ MANUAL_GPU_WATTAGE_BY_VRAM = {
 
 
 def ask_gemini(prompt):
-    """Send a prompt to Gemini (with web search enabled) and return the answer as plain text."""
+    """Send a prompt to Gemini (with web search enabled) and return the
+    answer as plain text."""
     response = client.models.generate_content(
         model=model_name,
         contents=prompt,
@@ -59,16 +60,24 @@ def ask_gemini(prompt):
 
 
 def parse_json_answer(answer):
-    """Strip markdown code fences (Gemini adds them sometimes despite being told not to) and parse JSON."""
-    cleaned = re.sub(r"^```(json)?|```$", "", answer.strip(), flags=re.MULTILINE).strip()
+    """Strip markdown code fences (Gemini adds them sometimes despite being
+    told not to) and parse JSON."""
+    cleaned = re.sub(
+        r"^```(json)?|```$",
+        "",
+        answer.strip(),
+        flags=re.MULTILINE).strip()
     return json.loads(cleaned)
 
 
 def lookup_sockets_batch(architectures):
-    """Ask Gemini for the CPU socket of every microarchitecture in one call. Returns {name: socket}."""
+    """Ask Gemini for the CPU socket of every microarchitecture in one
+    call. Returns {name: socket}."""
+
     arch_list = "\n".join(f"- {a}" for a in architectures)
     prompt = (
-        "For each CPU microarchitecture listed below, give the socket it uses.\n\n"
+        "For each CPU microarchitecture listed below, give the socket "
+        "it uses.\n\n"
         f"{arch_list}\n\n"
         "Respond with ONLY a JSON object mapping each microarchitecture name "
         'exactly as given to its socket name, like: {"Zen 4": "AM5"}. '
@@ -79,13 +88,16 @@ def lookup_sockets_batch(architectures):
 
 
 def lookup_wattages_batch(chipsets):
-    """Ask Gemini for the typical wattage of every chipset in one call. Returns {name: watts}."""
+    """Ask Gemini for the typical wattage of every chipset in one call.
+    Returns {name: watts}."""
+
     chipset_list = "\n".join(f"- {c}" for c in chipsets)
     prompt = (
-        "For each GPU chipset listed below, give its typical reference board "
-        f"power (TDP) in watts.\n\n{chipset_list}\n\n"
-        "Respond with ONLY a JSON object mapping each chipset name exactly as "
-        'given to its wattage as a plain number, like: {"GeForce RTX 4070": 200}. '
+        "For each GPU chipset listed below, give its typical reference "
+        f"board power (TDP) in watts.\n\n{chipset_list}\n\n"
+        "Respond with ONLY a JSON object mapping each chipset name "
+        'exactly as given to its wattage as a plain number, like: '
+        '{"GeForce RTX 4070": 200}. '
         "No other text, no markdown code fences."
     )
     answer = ask_gemini(prompt)
@@ -94,12 +106,15 @@ def lookup_wattages_batch(chipsets):
 
 def chunked(items, size):
     """Split a list into consecutive chunks of at most `size` items."""
+
     for i in range(0, len(items), size):
         yield items[i:i + size]
 
 
 def enrich_cpu_sockets():
-    """Look up and store the socket for every distinct CPU microarchitecture that doesn't have one yet."""
+    """Look up and store the socket for every distinct CPU
+    microarchitecture that doesn't have one yet."""
+
     architectures = [
         row[0]
         for row in CPU.query.filter(CPU.socket.is_(None))
@@ -111,7 +126,8 @@ def enrich_cpu_sockets():
     if not architectures:
         print("Every microarchitecture already has a socket -- nothing to do.")
         return
-    print(f"Looking up sockets for {len(architectures)} microarchitectures in one call...")
+    count = len(architectures)
+    print(f"Looking up sockets for {count} microarchitectures in one call...")
 
     results = lookup_sockets_batch(architectures)
     for arch, socket in results.items():
@@ -125,9 +141,11 @@ def enrich_cpu_sockets():
 
 
 def apply_manual_gpu_overrides():
-    """Fill in known wattages Gemini can't reliably answer, before any AI call is made."""
+    """Fill in known wattages Gemini can't reliably answer, before any
+    AI call is made."""
     for chipset, watts in MANUAL_GPU_WATTAGE.items():
-        GPU.query.filter(GPU.chipset == chipset, GPU.wattage.is_(None)).update({"wattage": watts})
+        GPU.query.filter(GPU.chipset == chipset,
+                         GPU.wattage.is_(None)).update({"wattage": watts})
     for (chipset, vram), watts in MANUAL_GPU_WATTAGE_BY_VRAM.items():
         GPU.query.filter(
             GPU.chipset == chipset, GPU.vram == vram, GPU.wattage.is_(None)
@@ -136,7 +154,8 @@ def apply_manual_gpu_overrides():
 
 
 def enrich_gpu_wattages():
-    """Look up and store the wattage for every distinct GPU chipset that doesn't have one yet."""
+    """Look up and store the wattage for every distinct GPU chipset
+    that doesn't have one yet."""
     apply_manual_gpu_overrides()
 
     chipsets = [
@@ -150,15 +169,22 @@ def enrich_gpu_wattages():
     if not chipsets:
         print("Every chipset already has a wattage -- nothing to do.")
         return
-    print(f"Looking up wattages for {len(chipsets)} chipsets in chunks of {chunk_size}...")
+    count = len(chipsets)
+    print(f"Looking up wattages for {count} chipsets "
+          f"in chunks of {chunk_size}...")
 
     all_missing = set(chipsets)
     for batch in chunked(chipsets, chunk_size):
         try:
             results = lookup_wattages_batch(batch)
-            answered = {chipset: watts for chipset, watts in results.items() if watts is not None}
+            answered = {
+                chipset: watts
+                for chipset, watts in results.items()
+                if watts is not None
+            }
             for chipset, wattage in answered.items():
-                GPU.query.filter_by(chipset=chipset).update({"wattage": wattage})
+                GPU.query.filter_by(chipset=chipset).update(
+                    {"wattage": wattage})
                 print(f"  {chipset} -> {wattage}W")
             db.session.commit()
             all_missing -= set(answered)

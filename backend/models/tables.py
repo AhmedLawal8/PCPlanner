@@ -87,6 +87,7 @@ class Case(db.Model):
     case_type = db.Column(db.String)
     color = db.Column(db.String)
 
+
 class Cooler(db.Model):
     __tablename__ = "coolers"
 

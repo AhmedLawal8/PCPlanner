@@ -1,5 +1,7 @@
 from budget_split import BUDGET_SPLITS, allocate_budget
-from models.tables import CPU, Case, Cooler, GPU, Motherboard, PSU, RAM, Storage
+from models.tables import (
+    CPU, Case, Cooler, GPU, Motherboard, PSU, RAM, Storage,
+)
 
 CATEGORY_MODELS = {
     "cpu": CPU,
@@ -62,7 +64,8 @@ def get_minimum_budget(use_case):
     use_case = use_case.lower()
     if use_case not in BUDGET_SPLITS:
         valid = ", ".join(BUDGET_SPLITS.keys())
-        raise ValueError(f"Unknown use case '{use_case}'. Valid options: {valid}")
+        raise ValueError(
+            f"Unknown use case '{use_case}'. Valid options: {valid}")
 
     minimum = 0
     for category, pct in BUDGET_SPLITS[use_case].items():
@@ -73,7 +76,9 @@ def get_minimum_budget(use_case):
             .first()
         )
         if cheapest is None:
-            raise ValueError(f"No priced parts available for {model.__tablename__}")
+            raise ValueError(
+                f"No priced parts available for {
+                    model.__tablename__}")
         minimum = max(minimum, cheapest.price / pct)
     return minimum
 
@@ -86,7 +91,8 @@ def recommend_build(total_budget, use_case):
     minimum = get_minimum_budget(use_case)
     if total_budget < minimum:
         raise ValueError(
-            f"Budget too low for a '{use_case}' build: at least ${minimum:.2f} "
+            f"Budget too low for a '{use_case}' build: at least ${
+                minimum:.2f} "
             f"is needed so every required category can afford its cheapest "
             f"available part."
         )
