@@ -1,14 +1,13 @@
-import { Container, Title } from '@mantine/core'
+import { Routes, Route } from 'react-router-dom'
 import { QuizPage } from './components/QuizPage'
+import { SummaryPage } from './components/SummaryPage'
 
 function App() {
   return (
-    <Container size="sm" py="xl">
-      <Title order={2} mb="lg">
-        PC Build Quiz
-      </Title>
-      <QuizPage />
-    </Container>
+    <Routes>
+      <Route path="/" element={<QuizPage />} />
+      <Route path="/summary" element={<SummaryPage />} />
+    </Routes>
   )
 }
 
