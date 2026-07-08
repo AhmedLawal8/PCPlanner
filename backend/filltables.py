@@ -19,9 +19,15 @@ def load(filename):
         return json.load(f)
 
 
+def load_priced(filename):
+    # same as load(), but skips entries with no price -- PCPartPicker
+    # has no active seller for these, so they're effectively unavailable
+    return [item for item in load(filename) if item.get("price") is not None]
+
+
 def build_cpus():
     rows = []
-    for item in load("cpu.json"):
+    for item in load_priced("cpu.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -30,15 +36,16 @@ def build_cpus():
             "base_clock": item.get("core_clock"),
             "boost_clock": item.get("boost_clock"),
             "wattage": item.get("tdp"),
-            "socket": None,  # backfilled by scripts/enrich_compat.py
+            "socket": None,  # backfilled by enrich_compat.py
             "microarchitecture": item.get("microarchitecture"),
+            "graphics": item.get("graphics"),
         })
     return rows
 
 
 def build_motherboards():
     rows = []
-    for item in load("motherboard.json"):
+    for item in load_priced("motherboard.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -53,7 +60,7 @@ def build_motherboards():
 
 def build_gpus():
     rows = []
-    for item in load("video-card.json"):
+    for item in load_priced("video-card.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -68,7 +75,7 @@ def build_gpus():
 
 def build_rams():
     rows = []
-    for item in load("memory.json"):
+    for item in load_priced("memory.json"):
         speed = item.get("speed") or [None, None]
         modules = item.get("modules") or [None, None]
         # the dictionary value for this one gives two values we need split.
@@ -87,7 +94,7 @@ def build_rams():
 
 def build_storages():
     rows = []
-    for item in load("internal-hard-drive.json"):
+    for item in load_priced("internal-hard-drive.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -100,7 +107,7 @@ def build_storages():
 
 def build_psus():
     rows = []
-    for item in load("power-supply.json"):
+    for item in load_priced("power-supply.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -112,7 +119,7 @@ def build_psus():
 
 def build_cases():
     rows = []
-    for item in load("case.json"):
+    for item in load_priced("case.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],
@@ -132,7 +139,7 @@ def average_if_range(value):
 
 def build_coolers():
     rows = []
-    for item in load("cpu-cooler.json"):
+    for item in load_priced("cpu-cooler.json"):
         rows.append({
             "name": item["name"],
             "price": item["price"],

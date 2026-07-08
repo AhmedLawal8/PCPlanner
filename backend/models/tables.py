@@ -20,9 +20,13 @@ class CPU(db.Model):
     wattage = db.Column(db.Integer)
     socket = db.Column(db.String)
     microarchitecture = db.Column(db.String)
+    graphics = db.Column(db.String)
     # The scraped data has no "socket" field directly, only
     # "microarchitecture" (e.g. "Zen 4", "Raptor Lake"). socket is backfilled
     # from microarchitecture by enrich_compat.py.
+    # graphics is the integrated GPU name (e.g. "Radeon"), or null if the
+    # CPU has none -- used to keep GPU-less use cases (e.g. "general")
+    # from ever recommending a CPU with no video output at all.
 
 class Motherboard(db.Model):
     __tablename__ = "motherboards"

@@ -1,21 +1,10 @@
-import json
-import os
-import re
 import time
 
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-
 from app import create_app
+from gemini_client import ask_gemini, parse_json_answer
 from models.db import db
 from models.tables import CPU, GPU
 
-load_dotenv()
-
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-search_tool = types.Tool(google_search=types.GoogleSearch())
-model_name = "gemini-2.5-flash"
 delay_seconds = 13  # stay under the 5-requests-per-minute quota
 chunk_size = 40      # how many chipsets to ask about per GPU call
 
@@ -48,28 +37,6 @@ MANUAL_GPU_WATTAGE_BY_VRAM = {
 }
 
 
-def ask_gemini(prompt):
-    """Send a prompt to Gemini (with web search enabled) and return the
-    answer as plain text."""
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(tools=[search_tool]),
-    )
-    return response.text.strip()
-
-
-def parse_json_answer(answer):
-    """Strip markdown code fences (Gemini adds them sometimes despite being
-    told not to) and parse JSON."""
-    cleaned = re.sub(
-        r"^```(json)?|```$",
-        "",
-        answer.strip(),
-        flags=re.MULTILINE).strip()
-    return json.loads(cleaned)
-
-
 def lookup_sockets_batch(architectures):
     """Ask Gemini for the CPU socket of every microarchitecture in one
     call. Returns {name: socket}."""
@@ -83,7 +50,7 @@ def lookup_sockets_batch(architectures):
         'exactly as given to its socket name, like: {"Zen 4": "AM5"}. '
         "No other text, no markdown code fences."
     )
-    answer = ask_gemini(prompt)
+    answer = ask_gemini(prompt, use_search=True)
     return parse_json_answer(answer)
 
 
@@ -100,7 +67,7 @@ def lookup_wattages_batch(chipsets):
         '{"GeForce RTX 4070": 200}. '
         "No other text, no markdown code fences."
     )
-    answer = ask_gemini(prompt)
+    answer = ask_gemini(prompt, use_search=True)
     return parse_json_answer(answer)
 
 
@@ -129,7 +96,12 @@ def enrich_cpu_sockets():
     count = len(architectures)
     print(f"Looking up sockets for {count} microarchitectures in one call...")
 
-    results = lookup_sockets_batch(architectures)
+    try:
+        results = lookup_sockets_batch(architectures)
+    except Exception as error:
+        print(f"  FAILED: {error}")
+        return
+
     for arch, socket in results.items():
         CPU.query.filter_by(microarchitecture=arch).update({"socket": socket})
         print(f"  {arch} -> {socket}")
