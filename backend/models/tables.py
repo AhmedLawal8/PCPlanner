@@ -19,9 +19,10 @@ class CPU(db.Model):
     boost_clock = db.Column(db.Float)
     wattage = db.Column(db.Integer)
     socket = db.Column(db.String)
-    # The scraped data has no "socket" field directly  only
-    # "microarchitecture" (e.g. "Zen 4", "Raptor Lake"). 
-    # We will see if ai can handle the task of finding compat regardless.
+    microarchitecture = db.Column(db.String)
+    # The scraped data has no "socket" field directly, only
+    # "microarchitecture" (e.g. "Zen 4", "Raptor Lake"). socket is backfilled
+    # from microarchitecture by enrich_compat.py.
 
 class Motherboard(db.Model):
     __tablename__ = "motherboards"

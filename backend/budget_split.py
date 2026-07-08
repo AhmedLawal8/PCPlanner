@@ -23,13 +23,15 @@ BUDGET_SPLITS = {
         "cooler": 0.06,
     },
     "general": {
-        "cpu": 0.29,
-        "motherboard": 0.15,
-        "storage": 0.15,
-        "ram": 0.14,
-        "gpu": 0.10,
-        "psu": 0.08,
-        "case": 0.06,
+        # No dedicated GPU allocation -- integrated graphics are enough for
+        # browsing/light work, so that budget share goes to the other parts
+        # instead (proportionally redistributed from the old 10% GPU cut).
+        "cpu": 0.32,
+        "motherboard": 0.17,
+        "storage": 0.17,
+        "ram": 0.15,
+        "psu": 0.09,
+        "case": 0.07,
         "cooler": 0.03,
     },
     "streaming": {
