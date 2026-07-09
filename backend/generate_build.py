@@ -22,7 +22,10 @@ CATEGORY_MODELS = {
 }
 
 WINDOW_PCT = 0.20  # look up to 20% below the allocation
-RESULT_COUNT = 5
+UPPER_WINDOW_PCT = 0.20 # Look up to 20% higher the allocation
+CANDIDATE_POOL_SIZE = 12 # How many candiates to check through when querying
+
+RESULT_COUNT = 4
 
 
 def describe_use_case(use_case):
@@ -40,6 +43,45 @@ def requires_igpu(use_case):
     video output. Works for a preset name or a custom split dict."""
     return "gpu" not in resolve_splits(use_case)
 
+def select_representative_parts(parts, allocation):
+    """
+    Given a list of parts sorted by price (highest -> lowest),
+    return up to RESULT_COUNT parts that represent:
+        - budget
+        - best value
+        - recommend
+        - performance
+
+    Select based on proximity to target prices
+    """
+    if len(parts) <= RESULT_COUNT:
+        return parts
+
+    targets = [
+        allocation * (1 - WINDOW_PCT),   # budget (80%)
+        allocation * 0.90,               # best value
+        allocation,                      # recommend
+        allocation * (1 + WINDOW_PCT),   # performance (120%)
+    ]
+
+    selected = []
+
+    for target in targets:
+        # Ignore parts we've already selected
+        remaining = [p for p in parts if p not in selected]
+        if not remaining:
+            break
+
+        closest = min(
+            remaining,
+            key=lambda p: abs((p.price or 0) - target) #check for min by price
+        )
+        selected.append(closest)
+
+    # extra check the order consistent for the prompt (cheapest -> most expensive)
+    selected.sort(key=lambda p: p.price or 0)
+
+    return selected
 
 def recommend_parts(category, allocation, require_igpu=False):
     """
@@ -56,20 +98,24 @@ def recommend_parts(category, allocation, require_igpu=False):
     """
     model = CATEGORY_MODELS[category]
     floor = max(allocation * (1 - WINDOW_PCT), 0)
+    ceiling = allocation * (1 + UPPER_WINDOW_PCT)
+
     igpu_only = require_igpu and category == "cpu"  # only CPU has .graphics
 
-    query = model.query.filter(model.price <= allocation, model.price >= floor)
+    query = model.query.filter(model.price >= floor, model.price <= ceiling)
+    
     if igpu_only:
         query = query.filter(model.graphics.isnot(None))
-    parts = query.order_by(model.price.desc()).limit(RESULT_COUNT).all()
+        
+    parts = query.order_by(model.price.desc()).limit(CANDIDATE_POOL_SIZE).all()
 
     if len(parts) < RESULT_COUNT:
-        query = model.query.filter(model.price <= allocation)
+        query = model.query.filter(model.price <= ceiling)
         if igpu_only:
             query = query.filter(model.graphics.isnot(None))
-        parts = query.order_by(model.price.desc()).limit(RESULT_COUNT).all()
+        parts = query.order_by(model.price.desc()).limit(CANDIDATE_POOL_SIZE).all()
 
-    return parts
+    return select_representative_parts(parts, allocation)
 
 
 def get_minimum_budget(use_case):
@@ -156,6 +202,9 @@ def serialize_part(category, part):
     relevant to picking/compatibility for its category."""
     return {field: getattr(part, field) for field in COMPAT_FIELDS[category]}
 
+# The four tier labels Gemini may assign. If two candidates would share a label,
+#  pick the better fit for that label and give the other the next-closest label.
+TIER_LABELS = ["recommend", "best_value", "performance", "budget"]
 
 def build_prompt(candidates_by_category, use_case, total_budget):
     """Build the single prompt asking Gemini to pick one part per
@@ -174,81 +223,104 @@ def build_prompt(candidates_by_category, use_case, total_budget):
 
     parts_block = "\n\n".join(sections)
 
+    # Build a compact example block showing the expected shape for two
+    # categories so Gemini has a concrete template to follow.
+    example = (
+        '{\n'
+        '  "cpu": [\n'
+        '    {"name": "<exact name>", "tier": "recommend",   "why": "..."},\n'
+        '    {"name": "<exact name>", "tier": "performance", "why": "..."},\n'
+        '    {"name": "<exact name>", "tier": "best_value",  "why": "..."},\n'
+        '    {"name": "<exact name>", "tier": "budget",      "why": "..."}\n'
+        '  ],\n'
+        '  "gpu": [ ... same pattern ... ],\n'
+        '  ... (all eight categories) ...,\n'
+        '  "summary": "<2-3 sentence overview of the whole build>"\n'
+        '}'
+    )
+
     return (
         f"You are building a PC for {describe_use_case(use_case)} with a "
-        f"total budget of ${total_budget:.2f}. For each category below, "
-        "pick the single best option as your recommendation, and also "
-        "write one short sentence about EVERY option listed, not just "
-        "your recommendation, noting a strength or tradeoff of that "
-        "specific part. You may only reference parts that appear in "
-        'these lists, copying the "name" field exactly. Consider '
-        "compatibility (socket, memory_type, wattage vs PSU) and value "
-        "for money.\n\n"
-        f"{parts_block}\n\n"  # per-category candidate lists land here
-        "Respond with ONLY a JSON object in this exact shape, nothing "
+        f"total budget of ${total_budget:.2f}.\n\n"
+        "For EVERY part listed in each category below, assign one tier "
+        f"label from this set: {TIER_LABELS}. Some candidates may be priced"
+        "up to 20 percent above the category allocation to represent "
+        " higher-performance alternatives. Each label may appear at "
+        "most once per category; if you have fewer candidates than labels "
+        "just use as many labels as there are candidates. Also write one "
+        'short "why" sentence per part explaining its key strength or '
+        "tradeoff for this use case. You may only reference parts that "
+        'appear in these lists, copying the "name" field exactly. '
+        "Consider compatibility (socket, memory_type, PSU wattage) and "
+        "value for money.\n\n"
+        f"{parts_block}\n\n"
+        "Respond with ONLY a JSON object in exactly this shape, nothing "
         "else, no markdown code fences:\n"
-        "{\n"
-        '  "cpu": {\n'
-        '    "recommended": "<exact name of your pick>",\n'
-        '    "notes": {"<exact name>": "<short note>", "...": "..."}\n'
-        "  },\n"
-        '  "motherboard": {"recommended": "...", "notes": {...}},\n'
-        '  "gpu": {"recommended": "...", "notes": {...}},\n'
-        '  "ram": {"recommended": "...", "notes": {...}},\n'
-        '  "storage": {"recommended": "...", "notes": {...}},\n'
-        '  "psu": {"recommended": "...", "notes": {...}},\n'
-        '  "case": {"recommended": "...", "notes": {...}},\n'
-        '  "cooler": {"recommended": "...", "notes": {...}},\n'
-        '  "summary": "<2-3 sentence overview of the whole build>"\n'
-        "}"
+        f"{example}"
     )
 
 
 def build_option_group(category, candidates, ai_result):
     """
-    Return {"category", "options", "recommendedIndex"} for one category,
-    matching the frontend's PartCategoryGroup/PartOption shape.
+    Return a flat list of option dicts for one category, each with:
+    id, name, price, tier, why
 
-    Every candidate gets its own note if the AI gave one. The
-    recommended pick is validated against the real candidate list the
-    same way the old single-pick version worked, falling back to the
-    closest-to-budget option (index 0) if the AI's pick doesn't match a
-    real name. This is what keeps the AI from ever "inventing" a part
-    that doesn't exist.
+    Gemini's response for a category is expected to be a list like:
+      [{"name": "...", "tier": "recommend", "why": "..."}, ...]
+
+    Validation rules (keeps AI from inventing parts or bad tiers):
+    - Any entry whose "name" doesn't exactly match a real candidate is
+      dropped silently.
+    - Any entry with an unrecognised tier gets tier "budget" as a fallback.
+    - If the AI gave no entry for a candidate, it still appears in the list
+      with tier "budget" and a generic why.
+    - If no entry has tier "recommend" after all of the above (AI returned
+      garbage for the whole category), the first candidate is promoted to
+      "recommend" so the frontend always has something to default to.
     """
-    # category_result/notes might not even be the right shape if Gemini's
-    # JSON was malformed for this one category specifically (still valid
-    # JSON overall, just not the shape we asked for), so don't trust
-    # their type. this keeps one bad category from crashing the whole
-    # build instead of just losing its AI notes
-    category_result = ai_result.get(category, {})
-    if not isinstance(category_result, dict):
-        category_result = {}
-    notes = category_result.get("notes", {})
-    if not isinstance(notes, dict):
-        notes = {}
-    recommended_name = category_result.get("recommended")
 
-    valid_names = [part.name for part in candidates]
-    if recommended_name not in valid_names:
-        recommended_name = valid_names[0]
-    recommended_index = valid_names.index(recommended_name)
+    # Build a name -> DB row lookup so we can attach id/price and validate names
+    candidate_by_name = {part.name: part for part in candidates}
+    valid_names = list(candidate_by_name)  # preserves DB order for fallbacks
+
+    # Parse what Gemini returned for this category; tolerate wrong types
+    ai_entries = ai_result.get(category, [])
+    if not isinstance(ai_entries, list):
+        ai_entries = []
+
+    ai_by_name = {}
+    for entry in ai_entries:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if name in candidate_by_name:
+            ai_by_name[name] = entry
 
     options = []
-    for i, part in enumerate(candidates):
-        note = notes.get(part.name, "")
-        # compare by index here, not name, so if two candidates happen
-        # to share the same name (does happen, two listings of the same
-        # board), only the actual recommended one gets this fallback text
-        if i == recommended_index and not note:
-            note = "Selected automatically (closest to budget)."
-        options.append({"name": part.name, "price": part.price, "note": note})
+    for name in valid_names:
+        part = candidate_by_name[name]
+        ai_entry = ai_by_name.get(name, {})
 
-    return {
-        "category": category,
-        "options": options,
-        "recommendedIndex": recommended_index,
-    }
+        raw_tier = ai_entry.get("tier", "")
+        tier = raw_tier if raw_tier in TIER_LABELS else "budget"
+        why = ai_entry.get("why") or ""
+
+        options.append({
+            "id":    part.id,
+            "name":  part.name,
+            "price": part.price,
+            "tier":  tier,
+            "why":   why,
+        })
+
+    # Guarantee at least one "recommend" so the frontend always has a default
+    has_recommend = any(o["tier"] == "recommend" for o in options)
+    if options and not has_recommend:
+        options[0]["tier"] = "recommend"
+        if not options[0]["why"]:
+            options[0]["why"] = "Selected automatically as closest to budget."
+
+    return options
 
 
 # this is the main entry point for the frontend. already wired up:
@@ -281,21 +353,24 @@ def generate_build(total_budget, use_case):
     parts = {}
     missing_categories = []
     total_price = 0
+
     for category, candidates in candidates_by_category.items():
         if not candidates:
-            missing_categories.append(category)
             continue
 
-        group = build_option_group(category, candidates, ai_result)
-        parts[category] = group
-        recommended = group["options"][group["recommendedIndex"]]
+        options = build_option_group(category, candidates, ai_result)
+        parts[category] = options
+
+        recommended = next(
+            (o for o in options if o["tier"] == "recommend"), options[0]
+        )
+
         total_price += recommended["price"] or 0
 
     return {
         "parts": parts,
         "total_price": round(total_price, 2),
         "summary": ai_result.get("summary", ""),
-        "missing_categories": missing_categories,
     }
 
 
