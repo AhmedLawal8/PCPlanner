@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 
-from .user_auth import create_account, verify_login, get_user
+from .helper_auth import create_account, verify_login, get_user
 
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth") #create a blueprint for routes to prevent having long app.py

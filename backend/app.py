@@ -4,8 +4,9 @@ import os
 
 from models.db import db
 from config import SECRET_KEY
-from api.auth.routes import auth_bp
-from api.components.routes import components_bp
+from api.auth import auth_bp
+from api.components import components_bp
+from api.builds import builds_bp
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
