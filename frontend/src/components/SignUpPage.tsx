@@ -2,7 +2,7 @@ import { Button, Center, Paper, PasswordInput, Stack, TextInput, Title } from '@
 
 export function SignUpPage() {
   return (
-    <Center mih="100vh">
+    <Center h="100%">
       <Paper withBorder radius="md" p="xl" w={400}>
         <Stack gap="md">
           <Title order={2} ta="center">
