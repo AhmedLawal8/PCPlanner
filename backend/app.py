@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_cors import CORS
 import os
 
 from models.db import db
@@ -6,7 +7,8 @@ from config import SECRET_KEY
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
-
+    CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
+    
     os.makedirs(app.instance_path, exist_ok=True)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = (
