@@ -8,7 +8,7 @@ from models.tables import CPU, GPU
 delay_seconds = 13  # stay under the 5-requests-per-minute quota
 chunk_size = 40      # how many chipsets to ask about per GPU call
 
-# Wattages Gemini couldn't reliably answer even with search enabled --
+# Wattages Gemini couldn't reliably answer even with search enabled,
 # mostly hardware too new (as of writing) to have indexed reference specs,
 # plus one source-data naming quirk. Confirmed by hand. Applied before any
 # AI call is made, so re-running this on a fresh database never wastes
@@ -25,7 +25,7 @@ MANUAL_GPU_WATTAGE = {
     "GeForce RTX 5090": 575,
     "Arc B570": 150,
     "Arc B580": 190,
-    "T400  2GB": 30,  # double space -- matches the source data's chipset name
+    "T400  2GB": 30,  # double space here matches the source data's name
     "T400 4GB": 30,
 }
 
@@ -91,7 +91,7 @@ def enrich_cpu_sockets():
         if row[0] is not None
     ]
     if not architectures:
-        print("Every microarchitecture already has a socket -- nothing to do.")
+        print("Every microarchitecture already has a socket, nothing to do.")
         return
     count = len(architectures)
     print(f"Looking up sockets for {count} microarchitectures in one call...")
@@ -139,7 +139,7 @@ def enrich_gpu_wattages():
         if row[0] is not None
     ]
     if not chipsets:
-        print("Every chipset already has a wattage -- nothing to do.")
+        print("Every chipset already has a wattage, nothing to do.")
         return
     count = len(chipsets)
     print(f"Looking up wattages for {count} chipsets "

@@ -1,13 +1,13 @@
 import json
 
-from budget_split import BUDGET_SPLITS, allocate_budget
+from budget_split import allocate_budget, resolve_splits
 from gemini_client import ask_gemini, parse_json_answer
 from models.tables import (
     CPU, Case, Cooler, GPU, Motherboard, PSU, RAM, Storage,
 )
 
 # ---------------------------------------------------------------------
-# Candidate selection -- pulls real DB rows in budget for each category.
+# Candidate selection. pulls real DB rows in budget for each category.
 # ---------------------------------------------------------------------
 
 CATEGORY_MODELS = {
@@ -25,11 +25,20 @@ WINDOW_PCT = 0.20  # look up to 20% below the allocation
 RESULT_COUNT = 5
 
 
+def describe_use_case(use_case):
+    """Human-readable phrase for error/prompt text. use_case may be a
+    preset name (str) or a custom split (dict), and a raw dict would
+    print as ugly Python repr text if used directly in an f-string."""
+    if isinstance(use_case, dict):
+        return "a custom budget breakdown"
+    return f"a '{use_case}' use case"
+
+
 def requires_igpu(use_case):
     """A CPU needs integrated graphics if this use case's split has no
-    dedicated GPU allocation at all -- otherwise the build would have no
-    video output."""
-    return "gpu" not in BUDGET_SPLITS[use_case.lower()]
+    dedicated GPU allocation at all, otherwise the build would have no
+    video output. Works for a preset name or a custom split dict."""
+    return "gpu" not in resolve_splits(use_case)
 
 
 def recommend_parts(category, allocation, require_igpu=False):
@@ -47,7 +56,7 @@ def recommend_parts(category, allocation, require_igpu=False):
     """
     model = CATEGORY_MODELS[category]
     floor = max(allocation * (1 - WINDOW_PCT), 0)
-    igpu_only = require_igpu and category == "cpu"
+    igpu_only = require_igpu and category == "cpu"  # only CPU has .graphics
 
     query = model.query.filter(model.price <= allocation, model.price >= floor)
     if igpu_only:
@@ -76,16 +85,11 @@ def get_minimum_budget(use_case):
     affordable, and other categories' true minimums are checked the same
     way. The largest of these is the real floor for that use case.
     """
-    use_case = use_case.lower()
-    if use_case not in BUDGET_SPLITS:
-        valid = ", ".join(BUDGET_SPLITS.keys())
-        raise ValueError(
-            f"Unknown use case '{use_case}'. Valid options: {valid}")
-
+    splits = resolve_splits(use_case)
     igpu_only_cpu = requires_igpu(use_case)
 
     minimum = 0
-    for category, pct in BUDGET_SPLITS[use_case].items():
+    for category, pct in splits.items():
         model = CATEGORY_MODELS[category]
         query = model.query.filter(model.price.isnot(None))
         if category == "cpu" and igpu_only_cpu:
@@ -106,7 +110,7 @@ def recommend_build(total_budget, use_case):
     minimum = get_minimum_budget(use_case)
     if total_budget < minimum:
         raise ValueError(
-            f"Budget too low for a '{use_case}' build: at least "
+            f"Budget too low for {describe_use_case(use_case)}: at least "
             f"${minimum:.2f} is needed so every required category can "
             f"afford its cheapest available part."
         )
@@ -123,11 +127,11 @@ def recommend_build(total_budget, use_case):
 
 
 
-# AI pick -- Gemini picks the best combination from the candidates above.
+# AI pick. Gemini picks the best combination from the candidates above.
 # ---------------------------------------------------------------------
 
 # Which fields actually matter for compatibility/value reasoning, per
-# category -- keeps the prompt small and focused instead of dumping every
+# category, keeps the prompt small and focused instead of dumping every
 # column we happen to store. Also doubles as the list of valid categories,
 # so there's only one place that needs to know what they are.
 COMPAT_FIELDS = {
@@ -160,7 +164,7 @@ def build_prompt(candidates_by_category, use_case, total_budget):
     # This is the actual hand-off point: candidates_by_category holds up
     # to 5 real DB rows per category (from recommend_build() above). Each
     # list gets serialized to plain JSON and dropped into its own labeled
-    # section of the prompt below -- these sections are the ONLY parts
+    # section of the prompt below. these sections are the ONLY parts
     # Gemini is allowed to pick from for that category.
     sections = []
     for category in COMPAT_FIELDS:
@@ -171,9 +175,9 @@ def build_prompt(candidates_by_category, use_case, total_budget):
     parts_block = "\n\n".join(sections)
 
     return (
-        f'You are building a PC for a "{use_case}" use case with a total '
-        f"budget of ${total_budget:.2f}. For each category below, pick "
-        "EXACTLY ONE part from the given options -- you may only choose "
+        f"You are building a PC for {describe_use_case(use_case)} with a "
+        f"total budget of ${total_budget:.2f}. For each category below, "
+        "pick EXACTLY ONE part from the given options -- you may only choose "
         'parts that appear in these lists, copying the "name" field '
         "exactly. Consider compatibility (socket, memory_type, wattage vs "
         "PSU) and value for money.\n\n"
@@ -201,7 +205,7 @@ def pick_part(category, candidates, ai_result):
     closest-to-budget candidate as a safe fallback.
 
     This is the one place that keeps the AI from ever "inventing" a part
-    that doesn't exist -- every returned part is either a validated AI
+    that doesn't exist. every returned part is either a validated AI
     pick or our own explicit fallback, never trusted blindly.
     """
     by_name = {part.name: part for part in candidates}
