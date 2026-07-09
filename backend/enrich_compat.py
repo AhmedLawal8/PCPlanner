@@ -3,7 +3,7 @@ import time
 from app import create_app
 from gemini_client import ask_gemini, parse_json_answer
 from models.db import db
-from models.tables import CPU, GPU
+from models.tables import CPU, GPU, Motherboard
 
 delay_seconds = 13  # stay under the 5-requests-per-minute quota
 chunk_size = 40      # how many chipsets to ask about per GPU call
@@ -36,6 +36,20 @@ MANUAL_GPU_WATTAGE_BY_VRAM = {
     ("Radeon RX 9060 XT", 8): 150,
 }
 
+# Every board on these sockets uses the same RAM type, no lookup needed.
+# LGA1700 is deliberately left out here since Intel lets vendors pick
+# DDR4 or DDR5 per board model on that socket, so it varies board to
+# board and has to be looked up by name instead.
+STATIC_MEMORY_TYPE_BY_SOCKET = {
+    "AM5": "DDR5",
+    "AM4": "DDR4",
+    "LGA1851": "DDR5",
+    "LGA1200": "DDR4",
+    "sTRX4": "DDR4",
+    "sTR4": "DDR4",
+    "LGA2066": "DDR4",
+}
+
 
 def lookup_sockets_batch(architectures):
     """Ask Gemini for the CPU socket of every microarchitecture in one
@@ -65,6 +79,23 @@ def lookup_wattages_batch(chipsets):
         "Respond with ONLY a JSON object mapping each chipset name "
         'exactly as given to its wattage as a plain number, like: '
         '{"GeForce RTX 4070": 200}. '
+        "No other text, no markdown code fences."
+    )
+    answer = ask_gemini(prompt, use_search=True)
+    return parse_json_answer(answer)
+
+
+def lookup_memory_types_batch(board_names):
+    """Ask Gemini whether each LGA1700 motherboard uses DDR4 or DDR5.
+    Returns {name: "DDR4" or "DDR5"}."""
+
+    name_list = "\n".join(f"- {n}" for n in board_names)
+    prompt = (
+        "For each LGA1700 motherboard listed below, say whether it uses "
+        f"DDR4 or DDR5 memory.\n\n{name_list}\n\n"
+        "Respond with ONLY a JSON object mapping each motherboard name "
+        'exactly as given to either "DDR4" or "DDR5", like: '
+        '{"Some Motherboard Name": "DDR5"}. '
         "No other text, no markdown code fences."
     )
     answer = ask_gemini(prompt, use_search=True)
@@ -168,11 +199,67 @@ def enrich_gpu_wattages():
         print(f"  No answer returned for: {sorted(all_missing)}")
 
 
+def apply_static_memory_types():
+    """Fill in memory_type for every socket where it's the same across
+    every board on that socket, no lookup needed."""
+    for socket, memory_type in STATIC_MEMORY_TYPE_BY_SOCKET.items():
+        Motherboard.query.filter(
+            Motherboard.socket == socket, Motherboard.memory_type.is_(None)
+        ).update({"memory_type": memory_type})
+    db.session.commit()
+
+
+def enrich_motherboard_memory_types():
+    """Look up and store memory_type for every motherboard that doesn't
+    have one yet. Static mapping first (free), then AI lookup for
+    LGA1700 boards specifically since that's the one socket where it
+    actually varies board to board."""
+    apply_static_memory_types()
+
+    board_names = [
+        row[0]
+        for row in Motherboard.query.filter(Motherboard.memory_type.is_(None))
+        .with_entities(Motherboard.name)
+        .distinct()
+        .all()
+        if row[0] is not None
+    ]
+    if not board_names:
+        print("Every motherboard already has a memory_type, nothing to do.")
+        return
+    count = len(board_names)
+    print(f"Looking up memory type for {count} motherboards "
+          f"in chunks of {chunk_size}...")
+
+    all_missing = set(board_names)
+    for batch in chunked(board_names, chunk_size):
+        try:
+            results = lookup_memory_types_batch(batch)
+            answered = {
+                name: mem_type
+                for name, mem_type in results.items()
+                if mem_type in ("DDR4", "DDR5")
+            }
+            for name, mem_type in answered.items():
+                Motherboard.query.filter_by(name=name).update(
+                    {"memory_type": mem_type})
+                print(f"  {name} -> {mem_type}")
+            db.session.commit()
+            all_missing -= set(answered)
+        except Exception as error:
+            print(f"  FAILED batch of {len(batch)}: {error}")
+        time.sleep(delay_seconds)
+
+    if all_missing:
+        print(f"  No answer returned for: {sorted(all_missing)}")
+
+
 def main():
     app = create_app()
     with app.app_context():
         enrich_cpu_sockets()
         enrich_gpu_wattages()
+        enrich_motherboard_memory_types()
     print("Enrichment complete.")
 
 
