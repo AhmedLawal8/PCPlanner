@@ -14,8 +14,8 @@ export function SummaryPage() {
   const { state } = useLocation()
   const answers = (state as SummaryLocationState | null)?.answers
 
-  if (!answers){
-    return <Navigate to="/" replace />
+  if (!answers) {
+    return <Navigate to="/build" replace />
   }
 
   return (
