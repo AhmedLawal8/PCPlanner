@@ -4,11 +4,13 @@ import os
 
 from models.db import db
 from config import SECRET_KEY
+from api.auth.routes import auth_bp
+from api.components.routes import components_bp
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
-    CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
-    
+    CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
+
     os.makedirs(app.instance_path, exist_ok=True)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = (
@@ -17,9 +19,9 @@ def create_app():
     app.config["SECRET_KEY"] = SECRET_KEY
 
     db.init_app(app)
-    from auth.routes import auth_bp
-    app.register_blueprint(auth_bp)
 
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(components_bp)
     return app
 
 if __name__ == "__main__":
