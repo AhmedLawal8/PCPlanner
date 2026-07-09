@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, session
 
-from .user_auth import create_account, verify_login, get_user
-
+from .helper_auth import create_account, verify_login, get_user
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth") #create a blueprint for routes to prevent having long app.py
 
+# POST /api/auth/register -- add a user to the db and create a session
 #Api to register user
 @auth_bp.route("/register", methods=["POST"])
 def register():
@@ -31,6 +31,7 @@ def register():
     except ValueError as e:
         return jsonify({"error": str(e)}), 409
 
+# POST /api/auth/login -- log in a user by checking if in user db and then creating session
 @auth_bp.route("/login", methods=["POST"])
 def login():
 
@@ -55,6 +56,7 @@ def login():
     session["user_id"] = user.id
     return jsonify({"id": user.id, "username": user.username})
 
+# POST /api/auth/logout -- log a user out
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     session.clear()
