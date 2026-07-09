@@ -44,6 +44,7 @@ def serialize_build(build):
         "parts":       parts,
     }
 
+# POST /api/builds/generate
 @builds_bp.route("/generate", methods=["POST"])
 def generate():
 
@@ -77,7 +78,8 @@ def generate():
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": "Build generation failed.", "detail": str(e)}), 500
-    
+
+# POST /api/builds/save
 # Expects: { name, total_price, summary, parts: { cpu: {id}, gpu: {id}, ... } }
 @builds_bp.route("/save", methods=["POST"])
 def save():
@@ -112,7 +114,79 @@ def save():
     db.session.commit()
     return jsonify(serialize_build(build)), 201
 
+# GET /api/builds/  — list all builds for the logged-in user
+@builds_bp.route("/", methods=["GET"])
+def list_builds():
+    user_id, err = login_required()
+    if err:
+        return err
 
+    builds = Build.query.filter_by(user_id=user_id).order_by(Build.created_at.desc()).all()
+    return jsonify([serialize_build(b) for b in builds])
 
+# GET /api/builds/<id>  — load one build (must belong to the current user)
+@builds_bp.route("/<int:build_id>", methods=["GET"])
+def get_build(build_id):
+    user_id, err = login_required()
+    if err:
+        return err
 
+    build = Build.query.filter_by(id=build_id, user_id=user_id).first()
+    if build is None:
+        return jsonify({"error": "Build not found."}), 404
+
+    return jsonify(serialize_build(build))
+
+# DELETE /api/builds/<id>
+@builds_bp.route("/<int:build_id>", methods=["DELETE"])
+def delete_build(build_id):
+    user_id, err = login_required()
+    if err:
+        return err
+
+    build = Build.query.filter_by(id=build_id, user_id=user_id).first()
+    if build is None:
+        return jsonify({"error": "Build not found."}), 404
+
+    db.session.delete(build)
+    db.session.commit()
+    return jsonify({"message": "Build deleted."})
+
+# PATCH /api/builds/<id>   — rename or swap component(s)
+# Accepts any combo of: { name, cpu_id, gpu_id, ... }
+@builds_bp.route("/<int:build_id>", methods=["PATCH"]) # Use patch since user might change one component instead of sending whole resource
+def update_build(build_id):
+    user_id, err = login_required()
+    if err:
+        return err
+
+    build = Build.query.filter_by(id=build_id, user_id=user_id).first()
+    if build is None:
+        return jsonify({"error": "Build not found."}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON."}), 400
+
+    # allow renaming
+    if "name" in data:
+        build.name = (data["name"] or "My Build").strip() or "My Build"
+
+    # allow swapping any individual component by passing its FK column directly
+    # e.g { "cpu_id": 42 }
+    valid_fk_cols = set(CATEGORY_TO_FK.values())
+    for key, value in data.items():
+        if key in valid_fk_cols:
+            setattr(build, key, value)
+
+    # Recalculate total price from the relationships
+    total = 0
+    for category in CATEGORY_TO_FK:
+        part = getattr(build, category)
+        if part and part.price:
+            total += part.price
+    build.total_price = round(total, 2)
+
+    db.session.commit()
+    return jsonify(serialize_build(build))
 

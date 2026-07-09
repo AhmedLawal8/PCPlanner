@@ -19,6 +19,7 @@ COMPONENT_MAP = {
 def serialize(component, fields):
     return {f: getattr(component, f) for f in fields}
 
+# GET /api/components/type/id -- get component information from db using component type and id
 # Route to get specific component information eg /cpu/23 or /gpu/12
 @components_bp.route("/<type>/<int:id>", methods=["GET"])
 def get_component(type, id):
