@@ -7,6 +7,7 @@ from config import SECRET_KEY
 from api.auth import auth_bp
 from api.components import components_bp
 from api.builds import builds_bp
+from api.guides import guides_bp
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
@@ -23,6 +24,8 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(components_bp)
+    app.register_blueprint(builds_bp)
+    app.register_blueprint(guides_bp)
     return app
 
 if __name__ == "__main__":
