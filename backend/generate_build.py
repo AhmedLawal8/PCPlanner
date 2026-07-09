@@ -177,59 +177,108 @@ def build_prompt(candidates_by_category, use_case, total_budget):
     return (
         f"You are building a PC for {describe_use_case(use_case)} with a "
         f"total budget of ${total_budget:.2f}. For each category below, "
-        "pick EXACTLY ONE part from the given options -- you may only choose "
-        'parts that appear in these lists, copying the "name" field '
-        "exactly. Consider compatibility (socket, memory_type, wattage vs "
-        "PSU) and value for money.\n\n"
+        "pick the single best option as your recommendation, and also "
+        "write one short sentence about EVERY option listed, not just "
+        "your recommendation, noting a strength or tradeoff of that "
+        "specific part. You may only reference parts that appear in "
+        'these lists, copying the "name" field exactly. Consider '
+        "compatibility (socket, memory_type, wattage vs PSU) and value "
+        "for money.\n\n"
         f"{parts_block}\n\n"  # per-category candidate lists land here
         "Respond with ONLY a JSON object in this exact shape, nothing "
         "else, no markdown code fences:\n"
         "{\n"
-        '  "cpu": {"name": "<exact name>", "why": "<one short sentence>"},\n'
-        '  "motherboard": {"name": "...", "why": "..."},\n'
-        '  "gpu": {"name": "...", "why": "..."},\n'
-        '  "ram": {"name": "...", "why": "..."},\n'
-        '  "storage": {"name": "...", "why": "..."},\n'
-        '  "psu": {"name": "...", "why": "..."},\n'
-        '  "case": {"name": "...", "why": "..."},\n'
-        '  "cooler": {"name": "...", "why": "..."},\n'
+        '  "cpu": {\n'
+        '    "recommended": "<exact name of your pick>",\n'
+        '    "notes": {"<exact name>": "<short note>", "...": "..."}\n'
+        "  },\n"
+        '  "motherboard": {"recommended": "...", "notes": {...}},\n'
+        '  "gpu": {"recommended": "...", "notes": {...}},\n'
+        '  "ram": {"recommended": "...", "notes": {...}},\n'
+        '  "storage": {"recommended": "...", "notes": {...}},\n'
+        '  "psu": {"recommended": "...", "notes": {...}},\n'
+        '  "case": {"recommended": "...", "notes": {...}},\n'
+        '  "cooler": {"recommended": "...", "notes": {...}},\n'
         '  "summary": "<2-3 sentence overview of the whole build>"\n'
         "}"
     )
 
 
-def pick_part(category, candidates, ai_result):
+def build_option_group(category, candidates, ai_result):
     """
-    Return (chosen_part, why) for one category: the AI's pick if it's
-    actually one of the real candidates it was given, otherwise the
-    closest-to-budget candidate as a safe fallback.
+    Return {"category", "options", "recommendedIndex"} for one category,
+    matching the frontend's PartCategoryGroup/PartOption shape.
 
-    This is the one place that keeps the AI from ever "inventing" a part
-    that doesn't exist. every returned part is either a validated AI
-    pick or our own explicit fallback, never trusted blindly.
+    Every candidate gets its own note if the AI gave one. The
+    recommended pick is validated against the real candidate list the
+    same way the old single-pick version worked, falling back to the
+    closest-to-budget option (index 0) if the AI's pick doesn't match a
+    real name. This is what keeps the AI from ever "inventing" a part
+    that doesn't exist.
     """
-    by_name = {part.name: part for part in candidates}
-    pick = ai_result.get(category, {})
-    chosen_part = by_name.get(pick.get("name"))
+    # category_result/notes might not even be the right shape if Gemini's
+    # JSON was malformed for this one category specifically (still valid
+    # JSON overall, just not the shape we asked for), so don't trust
+    # their type. this keeps one bad category from crashing the whole
+    # build instead of just losing its AI notes
+    category_result = ai_result.get(category, {})
+    if not isinstance(category_result, dict):
+        category_result = {}
+    notes = category_result.get("notes", {})
+    if not isinstance(notes, dict):
+        notes = {}
+    recommended_name = category_result.get("recommended")
 
-    if chosen_part is not None:
-        return chosen_part, pick.get("why", "")
+    valid_names = [part.name for part in candidates]
+    if recommended_name not in valid_names:
+        recommended_name = valid_names[0]
+    recommended_index = valid_names.index(recommended_name)
 
-    return candidates[0], "Selected automatically (closest to budget)."
+    options = []
+    for i, part in enumerate(candidates):
+        note = notes.get(part.name, "")
+        # compare by index here, not name, so if two candidates happen
+        # to share the same name (does happen, two listings of the same
+        # board), only the actual recommended one gets this fallback text
+        if i == recommended_index and not note:
+            note = "Selected automatically (closest to budget)."
+        options.append({"name": part.name, "price": part.price, "note": note})
+
+    return {
+        "category": category,
+        "options": options,
+        "recommendedIndex": recommended_index,
+    }
 
 
+# this is the main entry point for the frontend. already wired up:
+# POST /api/builds/generate (backend/api/builds.py) calls this directly
+# with generate_build(budget, use_case), where use_case is either a
+# preset name string ("gaming") or a custom split dict. no route changes
+# needed to support either one, see resolve_splits() above for why.
+#
+# the "parts" dict in the return value matches the frontend's
+# PartCategoryGroup/PartOption types (frontend/src/constants/parts.ts)
+# almost exactly, name/price/recommendedIndex line up already. the one
+# new thing frontend needs to add is a "note" field on PartOption to
+# actually show the per-option AI commentary that's now in the response
 def generate_build(total_budget, use_case):
-    """Get candidates, ask Gemini to pick one per category, build result."""
+    """Get candidates, ask Gemini for notes on each option, build result."""
     candidates_by_category = recommend_build(total_budget, use_case)
 
     try:
         prompt = build_prompt(candidates_by_category, use_case, total_budget)
-        ai_result = parse_json_answer(ask_gemini(prompt, use_search=True))
+        # search grounding off on purpose. the free tier gives zero
+        # search-grounding quota for the model family we're on right now
+        # (confirmed on the rate limit dashboard, not a usage issue, a
+        # new key won't fix it). plain generation still works fine and
+        # already gets the real candidate specs directly in the prompt
+        ai_result = parse_json_answer(ask_gemini(prompt, use_search=False))
     except Exception as error:
         print(f"generate_build: AI call/parse failed, using fallback: {error}")
         ai_result = {}
 
-    build = {}
+    parts = {}
     missing_categories = []
     total_price = 0
     for category, candidates in candidates_by_category.items():
@@ -237,13 +286,126 @@ def generate_build(total_budget, use_case):
             missing_categories.append(category)
             continue
 
-        part, why = pick_part(category, candidates, ai_result)
-        build[category] = {"name": part.name, "price": part.price, "why": why}
-        total_price += part.price or 0
+        group = build_option_group(category, candidates, ai_result)
+        parts[category] = group
+        recommended = group["options"][group["recommendedIndex"]]
+        total_price += recommended["price"] or 0
 
     return {
-        "parts": build,
+        "parts": parts,
         "total_price": round(total_price, 2),
         "summary": ai_result.get("summary", ""),
         "missing_categories": missing_categories,
     }
+
+
+# ---------------------------------------------------------------------
+# Compatibility checks. meant to run whenever a user swaps a part in the
+# UI, so this needs to be fast and consistent, not another AI call on
+# every click.
+# ---------------------------------------------------------------------
+
+# size tiers for case/motherboard form factor fit. a case can hold any
+# motherboard at its own tier or smaller, but not a bigger one, checked
+# after stripping spaces so "Micro ATX" (motherboard.type) and
+# "MicroATX" (case.case_type) both match the same keyword. sorted
+# longest-keyword-first so "microatx" gets checked before the bare "atx"
+# substring it also contains
+FORM_FACTOR_SIZE = {
+    "microatx": 2,
+    "miniitx": 1,
+    "ssiceb": 5,
+    "eatx": 4,
+    "atx": 3,
+}
+
+
+def _form_factor_size(type_string):
+    """Best-effort size tier for a form factor string. Returns None if
+    nothing recognizable is found, so the caller can skip the check
+    instead of guessing."""
+    if not type_string:
+        return None
+    normalized = type_string.lower().replace(" ", "")
+    for keyword, size in FORM_FACTOR_SIZE.items():
+        if keyword in normalized:
+            return size
+    return None
+
+
+# heads up, this isn't hooked up to a route yet. it needs to run in the
+# PATCH /api/builds/<id> route (api/builds.py) after a swap, so the
+# frontend actually finds out if the new combo doesn't work.
+#
+# no page reload needed for this btw, as long as the swap on the
+# frontend hits the route with fetch() and just updates state with
+# whatever comes back, that's already how a PATCH request works
+#
+# selected_parts needs the real DB rows, not ids. Build already has the
+# relationships set up though so it's just:
+#
+#   selected = {
+#       "cpu": build.cpu, "gpu": build.gpu,
+#       "motherboard": build.motherboard, "ram": build.ram,
+#       "psu": build.psu, "case": build.case,
+#   }
+#   warnings = check_compatibility(selected)
+#
+# skip whatever category the user hasn't picked yet, it just won't run
+# that check. send warnings back with the updated build so frontend can
+# show them
+def check_compatibility(selected_parts):
+    """
+    Given a dict of chosen parts by category (real DB rows, any category
+    can be missing), return a list of plain-text warnings for anything
+    that doesn't actually work together.
+    """
+    warnings = []
+
+    cpu = selected_parts.get("cpu")
+    gpu = selected_parts.get("gpu")
+    motherboard = selected_parts.get("motherboard")
+    ram = selected_parts.get("ram")
+    psu = selected_parts.get("psu")
+    case = selected_parts.get("case")
+
+    if cpu and motherboard and cpu.socket and motherboard.socket:
+        # compare with spaces stripped since the CPU socket (AI-derived)
+        # and motherboard socket (scraped) don't always agree on
+        # spacing, e.g. "LGA 1700" vs "LGA1700" for the exact same socket
+        cpu_socket = cpu.socket.replace(" ", "")
+        mobo_socket = motherboard.socket.replace(" ", "")
+        if cpu_socket != mobo_socket:
+            warnings.append(
+                f"CPU socket ({cpu.socket}) doesn't match motherboard "
+                f"socket ({motherboard.socket})."
+            )
+
+    if ram and motherboard and ram.memory_type and motherboard.memory_type:
+        if ram.memory_type != motherboard.memory_type:
+            warnings.append(
+                f"RAM type ({ram.memory_type}) doesn't match motherboard "
+                f"memory type ({motherboard.memory_type})."
+            )
+
+    if psu and psu.wattage:
+        cpu_watts = (cpu.wattage or 0) if cpu else 0
+        gpu_watts = (gpu.wattage or 0) if gpu else 0
+        draw = cpu_watts + gpu_watts
+        if draw and psu.wattage < draw:
+            warnings.append(
+                f"PSU wattage ({psu.wattage}W) may not cover the "
+                f"estimated CPU + GPU draw (~{draw}W)."
+            )
+
+    if case and motherboard:
+        case_size = _form_factor_size(case.case_type)
+        mobo_size = _form_factor_size(motherboard.type)
+        if case_size is not None and mobo_size is not None:
+            if case_size < mobo_size:
+                warnings.append(
+                    f"Case ({case.case_type}) size may not fit "
+                    f"{motherboard.type} motherboards."
+                )
+
+    return warnings

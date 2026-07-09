@@ -1,6 +1,6 @@
 from app import create_app
 from generate_build import generate_build
-from backend.api.auth.helper_auth import create_account, verify_login
+from api.helper_auth import create_account, verify_login
 
 USE_CASES = {
     "1": "gaming",
@@ -63,9 +63,14 @@ def generate_build_flow():
         return
 
     print(f"\n--- Your {use_case} build (${result['total_price']:.2f}) ---")
-    for category, part in result["parts"].items():
-        print(f"[{category.upper()}] {part['name']} - ${part['price']:.2f}")
-        print(f"    why: {part['why']}")
+    for category, group in result["parts"].items():
+        recommended = group["options"][group["recommendedIndex"]]
+        print(f"[{category.upper()}] {recommended['name']} - "
+              f"${recommended['price']:.2f}")
+        print(f"    why: {recommended['note']}")
+        others = len(group["options"]) - 1
+        if others:
+            print(f"    ({others} other option(s) available)")
 
     if result["missing_categories"]:
         missing = ", ".join(result["missing_categories"])
@@ -75,7 +80,7 @@ def generate_build_flow():
 
 
 def main():
-    # DB schema/data setup lives in filltables.py -- run that first if
+    # DB schema/data setup lives in filltables.py, run that first if
     # you're on a fresh database.
     app = create_app()
 

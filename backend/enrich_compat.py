@@ -134,6 +134,11 @@ def enrich_cpu_sockets():
         return
 
     for arch, socket in results.items():
+        # Gemini sometimes writes "LGA 1700" and other times "LGA1700"
+        # for the exact same socket. motherboard sockets (scraped, not
+        # AI-derived) never have the space, so strip it here to keep
+        # the two consistent for compatibility checks later
+        socket = socket.replace(" ", "")
         CPU.query.filter_by(microarchitecture=arch).update({"socket": socket})
         print(f"  {arch} -> {socket}")
     db.session.commit()

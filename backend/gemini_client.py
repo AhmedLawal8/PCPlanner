@@ -9,7 +9,7 @@ from google.genai import types
 load_dotenv()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-model_name = "gemini-2.5-flash"
+model_name = "gemini-flash-lite-latest"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
 
