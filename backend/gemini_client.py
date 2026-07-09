@@ -17,10 +17,10 @@ def ask_gemini(prompt, use_search=False):
     """
     Send a prompt to Gemini and return the answer as plain text.
 
-    use_search=True enables web search grounding -- turn it on when
+    use_search=True enables web search grounding, turn it on when
     Gemini needs to look up real-world facts it might not already know
     (e.g. a brand-new GPU's wattage). Leave it off when Gemini only needs
-    to reason over data already included in the prompt -- it's faster
+    to reason over data already included in the prompt, it's faster
     and cheaper with nothing to look up.
     """
     config = None
