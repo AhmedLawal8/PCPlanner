@@ -43,10 +43,7 @@ def serialize_build(build):
 
 # POST /api/builds/check-compatibility
 # Expects: { cpu_id, gpu_id, motherboard_id, ram_id, psu_id, case_id, ... }
-# (any category may be missing, that category just gets skipped). No
-# login required, no DB writes, just a live compatibility read for
-# whatever's currently selected on the summary page, before it's ever
-# saved as a real Build.
+# no login/DB needed, just checks whatever's currently selected
 @builds_bp.route("/check-compatibility", methods=["POST"])
 def check_compatibility_route():
     data = request.get_json(silent=True)

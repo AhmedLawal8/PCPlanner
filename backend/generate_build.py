@@ -178,12 +178,8 @@ def build_platform_candidates(allocations, igpu_only_cpu):
         if mobo not in mobo_candidates:
             mobo_candidates.append(mobo)
 
-    # RAM gets a broad pool across every memory_type actually present
-    # among the chosen motherboards, instead of just whichever single
-    # stick happened to be closest to budget for one specific board.
-    # Otherwise two CPU tiers on boards that both take DDR5 can collapse
-    # down to the exact same RAM pick, losing the budget/performance
-    # spread entirely.
+    # pull RAM from every memory_type across the chosen boards, not just
+    # the closest single stick, or multiple DDR5 boards collapse to 1 pick
     memory_types = {m.memory_type for m in mobo_candidates if m.memory_type}
     ram_pool = RAM.query.filter(
         RAM.price <= allocations["ram"] * (1 + UPPER_WINDOW_PCT),
@@ -461,12 +457,10 @@ def generate_build(total_budget, use_case):
         options = build_option_group(category, candidates, ai_result)
         parts[category] = options
 
-    # Gemini assigns tiers per category independently by price rank, so
-    # the "recommend" CPU and "recommend" motherboard/RAM can end up as
-    # picks that were never actually paired together (see the socket
-    # mismatch bug this replaced). Force the motherboard/RAM tiers to
-    # follow whichever specific board/RAM the recommended CPU was built
-    # alongside, using the pairing recommend_build() already worked out.
+    # Gemini picks "recommend" per category on its own, so it can tag a
+    # CPU and a motherboard that were never actually paired. Force the
+    # motherboard/RAM tiers to match whichever board/RAM the recommended
+    # CPU was actually built with.
     cpu_options = parts.get("cpu")
     if cpu_options:
         mobo_rows = {m.id: m for m in candidates_by_category.get("motherboard", [])}
@@ -474,12 +468,8 @@ def generate_build(total_budget, use_case):
         cpu_to_mobo = platform_links["cpu_to_mobo"]
         mobo_to_ram = platform_links["mobo_to_ram"]
 
-        # Prefer a CPU whose whole chain (motherboard + RAM) is fully
-        # resolved. Otherwise we could "recommend" a CPU whose only
-        # matching board has no affordable RAM at all anywhere in the
-        # candidate pool, e.g. a board that only takes DDR5 when every
-        # DDR5 kit is over budget, in which case there's nothing valid
-        # left to force RAM to match, no matter what we do below.
+        # prefer a CPU whose whole chain actually has RAM available,
+        # otherwise we'd recommend one whose only board has no RAM in budget
         fully_paired_ids = {
             cpu_id for cpu_id, mobo_id in cpu_to_mobo.items()
             if mobo_id in mobo_to_ram
