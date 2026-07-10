@@ -54,7 +54,7 @@ def check_compatibility_route():
         return jsonify({"error": "Invalid or missing JSON."}), 400
 
     selected = {}
-    for category, fk_col in CATEGORY_TO_FK.items():
+    for category in CATEGORY_TO_FK:
         part_id = data.get(f"{category}_id")
         if part_id is None:
             continue

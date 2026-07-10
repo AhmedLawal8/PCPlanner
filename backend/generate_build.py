@@ -134,21 +134,16 @@ def get_minimum_budget(use_case):
 
 def build_platform_candidates(allocations, igpu_only_cpu):
     """
-    Return (cpu_candidates, mobo_candidates, ram_candidates, links) where
-    cpu_candidates[i]'s socket always has a matching motherboard in
-    mobo_candidates, and that motherboard's memory_type always has
-    matching RAM in ram_candidates. `links` is
-    {"cpu_to_mobo": {cpu_id: mobo_id}, "mobo_to_ram": {mobo_id: ram_id}},
-    so the tier assigned to a CPU can be carried over to the specific
-    motherboard/RAM it was actually paired with (see generate_build).
+    Picking cpu/motherboard/ram independently, like every other category
+    does, can land you a CPU tier and a motherboard tier that don't
+    actually fit together (Intel CPU next to an AMD board), since each
+    one just grabs whatever's closest to its own budget with no clue what
+    the other picked. So instead we build all three together here.
 
-    Picking these three independently (like every other category) can
-    produce a CPU tier and a motherboard tier that don't actually fit
-    together, e.g. an Intel CPU candidate next to an AMD board, since
-    each would be the closest-to-budget pick in its own category with
-    no idea what the other picked. Building them together instead
-    means every socket that shows up in the CPU list is guaranteed to
-    have a real, compatible motherboard behind it.
+    Returns (cpu_candidates, mobo_candidates, ram_candidates, links).
+    links is {"cpu_to_mobo": {cpu_id: mobo_id}, "mobo_to_ram": {mobo_id: ram_id}}
+    so generate_build() can carry a CPU's tier over to whichever specific
+    board/RAM it was actually paired with here.
     """
     mobo_ceiling = allocations["motherboard"] * (1 + UPPER_WINDOW_PCT)
     available_sockets = {

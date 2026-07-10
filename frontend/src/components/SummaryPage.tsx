@@ -168,9 +168,8 @@ export function SummaryPage() {
   const [savedBuildId, setSavedBuildId] = useState<number | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
-  // Live compatibility pill — re-checked against the backend every time
-  // the selected parts change, independent of whether the build has
-  // been saved yet.
+  // live compatibility pill, re-checks with the backend every time the
+  // selected parts change, doesn't matter if the build's been saved yet
   const [compatCheck, setCompatCheck] = useState<{ compatible: boolean; warnings: string[] } | null>(null)
 
   // Inline detail state — one panel open at a time, keyed by "category/id"
