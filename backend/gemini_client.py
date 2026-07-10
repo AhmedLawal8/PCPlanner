@@ -9,7 +9,7 @@ from google.genai import types
 load_dotenv()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-model_name = "gemini-flash-lite-latest"
+model_name = "gemini-2.5-flash"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
 
@@ -29,12 +29,15 @@ def ask_gemini(prompt, use_search=False):
     response = client.models.generate_content(
         model=model_name, contents=prompt, config=config,
     )
-    return response.text.strip()
 
+    return response.text.strip()
 
 def parse_json_answer(answer):
     """Strip markdown code fences (Gemini adds them sometimes despite
     being told not to) and parse JSON."""
+    if not answer:
+        raise ValueError("Gemini returned an empty response")
+    
     cleaned = re.sub(
         r"^```(json)?|```$", "", answer.strip(), flags=re.MULTILINE
     ).strip()

@@ -147,6 +147,36 @@ def recommend_build(total_budget, use_case):
 
     allocations = allocate_budget(total_budget, use_case)
     igpu_only_cpu = requires_igpu(use_case)
+
+    # CPU first - no constraints
+    cpu_candidates = recommend_parts("cpu", allocations["cpu"], require_igpu=igpu_only_cpu)
+    
+    # Derive the sockets present in the CPU pool
+    cpu_sockets = {c.socket for c in cpu_candidates if c.socket}
+
+    # Motherboard - must match one of those sockets
+    mobo_query = Motherboard.query.filter(
+        Motherboard.price <= allocations["motherboard"] * (1 + UPPER_WINDOW_PCT),
+        Motherboard.socket.in_(cpu_sockets)
+    ).order_by(Motherboard.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
+    mobo_candidates = select_representative_parts(mobo_query, allocations["motherboard"])
+
+    # Derive memory types from surviving motherboards
+    memory_types = {m.memory_type for m in mobo_candidates if m.memory_type}
+
+    # RAM — must match motherboard memory type
+    ram_query = RAM.query.filter(
+        RAM.price <= allocations["ram"] * (1 + UPPER_WINDOW_PCT),
+        RAM.memory_type.in_(memory_types)
+    ).order_by(RAM.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
+    ram_candidates = select_representative_parts(ram_query, allocations["ram"])
+    
+    candidates = {
+        "cpu": cpu_candidates,
+        "motherboard": mobo_candidates,
+        "ram": ram_candidates,
+    }
+
     return {
         category: recommend_parts(
             category, allocation,

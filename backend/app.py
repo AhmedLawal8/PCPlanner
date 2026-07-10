@@ -23,6 +23,8 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(components_bp)
+    app.register_blueprint(builds_bp)
+    
     return app
 
 if __name__ == "__main__":

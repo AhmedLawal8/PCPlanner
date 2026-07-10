@@ -262,8 +262,6 @@ def enrich_motherboard_memory_types():
 def main():
     app = create_app()
     with app.app_context():
-        enrich_cpu_sockets()
-        enrich_gpu_wattages()
         enrich_motherboard_memory_types()
     print("Enrichment complete.")
 
