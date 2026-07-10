@@ -21,8 +21,7 @@ CATEGORY_MODELS = {
     "cooler": Cooler,
 }
 
-WINDOW_PCT = 0.20  # look up to 20% below the allocation
-UPPER_WINDOW_PCT = 0.20 # Look up to 20% higher the allocation
+UPPER_WINDOW_PCT = 0.10 # Look up to 10% higher the allocation
 CANDIDATE_POOL_SIZE = 12 # How many candiates to check through when querying
 
 RESULT_COUNT = 4
@@ -56,31 +55,23 @@ def select_representative_parts(parts, allocation):
     """
     if len(parts) <= RESULT_COUNT:
         return parts
+    sorted_parts = sorted(parts, key=lambda p: p.price or 0)
+    n = len(sorted_parts)
 
-    targets = [
-        allocation * (1 - WINDOW_PCT),   # budget (80%)
-        allocation * 0.90,               # best value
-        allocation,                      # recommend
-        allocation * (1 + WINDOW_PCT),   # performance (120%)
+    indices = [
+        0,                    # cheapest  → budget
+        n // 3,               # lower-mid → best_value
+        2 * n // 3,           # upper-mid → recommend
+        n - 1,                # priciest  → performance
     ]
 
+    seen = set()
     selected = []
 
-    for target in targets:
-        # Ignore parts we've already selected
-        remaining = [p for p in parts if p not in selected]
-        if not remaining:
-            break
-
-        closest = min(
-            remaining,
-            key=lambda p: abs((p.price or 0) - target) #check for min by price
-        )
-        selected.append(closest)
-
-    # extra check the order consistent for the prompt (cheapest -> most expensive)
-    selected.sort(key=lambda p: p.price or 0)
-
+    for i in indices:
+        if i not in seen:
+            seen.add(i)
+            selected.append(sorted_parts[i])
     return selected
 
 def recommend_parts(category, allocation, require_igpu=False):
@@ -97,23 +88,16 @@ def recommend_parts(category, allocation, require_igpu=False):
     the closest parts under the allocation with no lower bound.
     """
     model = CATEGORY_MODELS[category]
-    floor = max(allocation * (1 - WINDOW_PCT), 0)
     ceiling = allocation * (1 + UPPER_WINDOW_PCT)
 
     igpu_only = require_igpu and category == "cpu"  # only CPU has .graphics
 
-    query = model.query.filter(model.price >= floor, model.price <= ceiling)
+    query = model.query.filter(model.price <= ceiling)
     
     if igpu_only:
         query = query.filter(model.graphics.isnot(None))
         
-    parts = query.order_by(model.price.desc()).limit(CANDIDATE_POOL_SIZE).all()
-
-    if len(parts) < RESULT_COUNT:
-        query = model.query.filter(model.price <= ceiling)
-        if igpu_only:
-            query = query.filter(model.graphics.isnot(None))
-        parts = query.order_by(model.price.desc()).limit(CANDIDATE_POOL_SIZE).all()
+    parts = query.order_by(model.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
 
     return select_representative_parts(parts, allocation)
 
@@ -204,7 +188,7 @@ def serialize_part(category, part):
 
 # The four tier labels Gemini may assign. If two candidates would share a label,
 #  pick the better fit for that label and give the other the next-closest label.
-TIER_LABELS = ["recommend", "best_value", "performance", "budget"]
+
 
 def build_prompt(candidates_by_category, use_case, total_budget):
     """Build the single prompt asking Gemini to pick one part per
@@ -242,14 +226,12 @@ def build_prompt(candidates_by_category, use_case, total_budget):
     return (
         f"You are building a PC for {describe_use_case(use_case)} with a "
         f"total budget of ${total_budget:.2f}.\n\n"
-        "For EVERY part listed in each category below, assign one tier "
-        f"label from this set: {TIER_LABELS}. Some candidates may be priced"
-        "up to 20 percent above the category allocation to represent "
-        " higher-performance alternatives. Each label may appear at "
-        "most once per category; if you have fewer candidates than labels "
-        "just use as many labels as there are candidates. Also write one "
-        'short "why" sentence per part explaining its key strength or '
-        "tradeoff for this use case. You may only reference parts that "
+        "Assign tier labels based strictly by price rank within each category: "
+        f"cheapest = 'budget', second cheapest = 'recommend', "
+        f"second most expensive = 'best_value', most expensive = 'performance'. "
+        "The 'why' sentence should explain the "
+        "performance or value tradeoff for that price point given this use case "
+        "it is NOT used to justify the tier assignment. You may only reference parts that "
         'appear in these lists, copying the "name" field exactly. '
         "Consider compatibility (socket, memory_type, PSU wattage) and "
         "value for money.\n\n"
@@ -259,6 +241,7 @@ def build_prompt(candidates_by_category, use_case, total_budget):
         f"{example}"
     )
 
+TIER_LABELS = ["recommend", "best_value", "performance", "budget"]
 
 def build_option_group(category, candidates, ai_result):
     """
