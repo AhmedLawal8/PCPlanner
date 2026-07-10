@@ -6,13 +6,16 @@ import '@mantine/core/styles.css'
 import '@mantine/carousel/styles.css'
 import './index.css'
 import { theme } from './theme.ts'
+import { AuthProvider } from './context/AuthContext.tsx'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider theme={theme}>
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     </MantineProvider>
   </StrictMode>,

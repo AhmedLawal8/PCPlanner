@@ -59,20 +59,21 @@ def generate():
 
     budget   = data.get("budget")
     use_case = data.get("use_case")
+    priority = data.get("priority")
 
     #make sure budget and use case is included in the request
     if not budget or not use_case:
         return jsonify({"error": "budget and use_case are required."}), 400
-    
+
     # Input validation
     try:
         budget = float(budget)
     except (TypeError, ValueError):
         return jsonify({"error": "budget must be a number."}), 400
-    
+
     try:
         from generate_build import generate_build
-        result = generate_build(budget, use_case)
+        result = generate_build(budget, use_case, priority)
         return jsonify(result)
     except ValueError as e:
         # budget too low, unknown use_case, etc.
