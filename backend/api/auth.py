@@ -23,6 +23,12 @@ def get_current_user():
         "username": user.username,
     }), 200
 
+def login_required():
+    """Returns (user_id, None) if logged in, or (None, error_response) if not."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return None, (jsonify({"error": "Login required."}), 401)
+    return user_id, None
 
 # POST /api/auth/register -- add a user to the db and create a session
 #Api to register user

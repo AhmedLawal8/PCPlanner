@@ -5,6 +5,7 @@ import { QuizPage } from './components/QuizPage'
 import { SummaryPage } from './components/SummaryPage'
 import { GuidesPage } from './components/GuidesPage'
 import { BuildsPage } from './components/BuildsPage'
+import { BuildDetailPage } from './components/BuildDetailPage'
 import { SignInPage } from './components/SignInPage'
 import { SignUpPage } from './components/SignUpPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -22,6 +23,7 @@ function App() {
           <Route path="/quiz" element={<QuizPage />} />
           <Route path="/summary" element={<SummaryPage />} />
           <Route path="/builds" element={<BuildsPage />} />
+          <Route path="/builds/:id" element={<BuildDetailPage />} />
         </Route>
       </Route>
     </Routes>

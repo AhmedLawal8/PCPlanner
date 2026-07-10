@@ -25,23 +25,11 @@ import {
 import { IconCheck } from '@tabler/icons-react'
 import { AIOverview } from './AIOverview'
 import { USE_CASE_OPTIONS } from '../constants/quizOptions'
-import type { GenerateResponse, PartOption, PartTier } from '../constants/parts'
+import type { GenerateResponse, PartOption, PartTier, PatchBuildResponse, SavedBuild } from '../constants/parts'
+import { CATEGORY_ORDER, CATEGORY_LABELS, COMPONENT_FIELDS } from '../constants/parts'
 import { api, ApiError } from '../services/api'
 
 const ORANGE = '#C85A1A'
-
-const CATEGORY_ORDER = ['cpu', 'gpu', 'motherboard', 'ram', 'storage', 'psu', 'case', 'cooler']
-
-const CATEGORY_LABELS: Record<string, string> = {
-  cpu: 'CPU',
-  gpu: 'GPU',
-  motherboard: 'Motherboard',
-  ram: 'RAM',
-  storage: 'Storage',
-  psu: 'PSU',
-  case: 'Case',
-  cooler: 'Cooler',
-}
 
 const TIER_LABELS: Record<PartTier, string> = {
   budget: 'Budget',
@@ -55,66 +43,6 @@ const TIER_COLORS: Record<PartTier, string> = {
   best_value: 'blue',
   recommend: 'brandOrange',
   performance: 'violet',
-}
-
-// ── Component detail field configs ────────────────────────────────────────────
-
-interface FieldConfig {
-  key: string
-  label: string
-  format?: (val: unknown) => string
-}
-
-const COMPONENT_FIELDS: Record<string, FieldConfig[]> = {
-  cpu: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'cores', label: 'Cores' },
-    { key: 'base_clock', label: 'Base Clock', format: (v) => `${v} GHz` },
-    { key: 'boost_clock', label: 'Boost Clock', format: (v) => `${v} GHz` },
-    { key: 'wattage', label: 'TDP', format: (v) => `${v}W` },
-    { key: 'socket', label: 'Socket' },
-  ],
-  motherboard: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'socket', label: 'Socket' },
-    { key: 'type', label: 'Type' },
-    { key: 'memory_type', label: 'Memory Type' },
-    { key: 'max_memory', label: 'Max Memory', format: (v) => `${v} GB` },
-  ],
-  gpu: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'vram', label: 'VRAM', format: (v) => `${v} GB` },
-    { key: 'wattage', label: 'TDP', format: (v) => `${v}W` },
-    { key: 'chipset', label: 'Chipset' },
-  ],
-  ram: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'capacity', label: 'Capacity', format: (v) => `${v} GB` },
-    { key: 'speed', label: 'Speed', format: (v) => `${v} MHz` },
-    { key: 'memory_type', label: 'Memory Type' },
-  ],
-  storage: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'capacity', label: 'Capacity', format: (v) => `${v} GB` },
-    { key: 'drive_type', label: 'Drive Type' },
-    { key: 'interface', label: 'Interface' },
-  ],
-  psu: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'wattage', label: 'Wattage', format: (v) => `${v}W` },
-    { key: 'efficiency_rating', label: 'Efficiency' },
-  ],
-  case: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'case_type', label: 'Type' },
-    { key: 'color', label: 'Color' },
-  ],
-  cooler: [
-    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
-    { key: 'rpm', label: 'Fan Speed', format: (v) => `${v} RPM` },
-    { key: 'noise_level', label: 'Noise', format: (v) => `${v} dB` },
-    { key: 'radiator_size', label: 'Radiator', format: (v) => `${v} mm` },
-  ],
 }
 
 interface ComponentDetail {
@@ -237,6 +165,7 @@ export function SummaryPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [savedBuildId, setSavedBuildId] = useState<number | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
   // Inline detail state — one panel open at a time, keyed by "category/id"
@@ -252,8 +181,20 @@ export function SummaryPage() {
   const budgetPercent = Math.min(100, Math.round((runningTotal / budget) * 100))
   const isOverBudget = runningTotal > budget
 
-  // setWarnings wired up in Phase 6 (PATCH response)
-  void setWarnings
+  const handlePartSwitch = async (category: string, option: PartOption) => {
+    setSelectedParts((prev) => ({ ...prev, [category]: option }))
+
+    if (savedBuildId == null) return
+
+    try {
+      const result = await api.patch<PatchBuildResponse>(`/api/builds/${savedBuildId}`, {
+        [category]: option.id,
+      })
+      setWarnings(result.warnings ?? [])
+    } catch {
+      // don't surface swap errors — the local state is already updated
+    }
+  }
 
   const handleDetails = async (category: string, id: number) => {
     // Toggle off if same card
@@ -286,12 +227,13 @@ export function SummaryPage() {
       for (const [cat, part] of Object.entries(selectedParts)) {
         parts[cat] = { id: part.id }
       }
-      await api.post('/api/builds/save', {
+      const saved = await api.post<SavedBuild>('/api/builds/save', {
         name: buildName,
         total_price: runningTotal,
         summary: response.summary,
         parts,
       })
+      setSavedBuildId(saved.id)
       setSaveModalOpen(false)
       setSaved(true)
     } catch (err) {
@@ -407,12 +349,7 @@ export function SummaryPage() {
                             option={option}
                             isSelected={option.id === selected?.id}
                             isDetailOpen={option.id === openDetailId}
-                            onSelect={() =>
-                              setSelectedParts((prev) => ({
-                                ...prev,
-                                [group.category]: option,
-                              }))
-                            }
+                            onSelect={() => void handlePartSwitch(group.category, option)}
                             onDetails={() => handleDetails(group.category, option.id)}
                           />
                         ))}
