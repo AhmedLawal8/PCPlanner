@@ -11,47 +11,13 @@ import {
   Image,
   Stack,
   Text,
-  ThemeIcon,
   Title,
 } from '@mantine/core'
-import {
-  IconBrain,
-  IconAdjustments,
-  IconShieldCheck,
-  IconDeviceFloppy,
-  IconArrowRight,
-} from '@tabler/icons-react'
+import { IconArrowRight } from '@tabler/icons-react'
 import { useAuth } from '../contexts/AuthContext'
 import { MOCK_GUIDES } from '../constants/guides'
 
 const ORANGE = '#C85A1A'
-const ORANGE_LIGHT = '#fde8d8'
-
-const FEATURES = [
-  {
-    icon: IconBrain,
-    title: 'AI-Powered Builds',
-    description:
-      'Give us your budget and what you’re looking to do, and our AI will piece together a fully compatible build in no time',
-  },
-  {
-    icon: IconAdjustments,
-    title: 'Tier System',
-    description:
-      'Budget, Best Value, Recommended, and Performance options then you choose what fits.',
-  },
-  {
-    icon: IconShieldCheck,
-    title: 'Compatibility Checks',
-    description:
-      'Socket mismatches and PSU warnings are caught automatically before you save.',
-  },
-  {
-    icon: IconDeviceFloppy,
-    title: 'Save & Load',
-    description: 'Save multiple builds to your account and revisit them anytime.',
-  },
-]
 
 export function HomePage() {
   const { user } = useAuth()
@@ -161,79 +127,104 @@ export function HomePage() {
         </Container>
       </Box>
 
-      {/*Features*/}
-      <Box style={{ backgroundColor: '#1a1a18' }} py={72}>
+      {/* Built Different */}
+      <Box style={{ backgroundColor: '#1a1a18' }} py={80}>
         <Container size="xl">
-          <Title
-            order={2}
-            ta="center"
-            fw={700}
-            mb={8}
-            style={{ color: '#f5f5f3', fontFamily: 'Geist, sans-serif' }}
-          >
-            Everything you need to build smarter
-          </Title>
-          <Text
-            ta="center"
-            mb={48}
-            style={{ color: '#888', fontFamily: 'Geist, sans-serif' }}
-          >
-            No spreadsheets. No guesswork. Just a build that works.
-          </Text>
+          <Grid columns={12} align="center" gutter={{ base: 48, md: 80 }}>
 
-          {/* 22-col grid: first card 1.4× wider */}
-          <Grid columns={22} gutter="md">
-            {FEATURES.map(({ icon: Icon, title, description }, i) => (
-              <Grid.Col key={title} span={{ base: 22, sm: 11, lg: i === 0 ? 7 : 5 }}>
-                <Card
-                  padding="xl"
-                  h="100%"
+            {/* Left — PC image */}
+            <Grid.Col span={{ base: 12, md: 5 }} visibleFrom="md">
+              <Image
+                src="/images/pc3.webp"
+                alt="PC build"
+                fit="contain"
+                style={{ opacity: 0.9, transform: 'scaleX(-1)', marginLeft: -70}}
+              />
+            </Grid.Col>
+
+            {/* Right — content */}
+            <Grid.Col span={{ base: 12, md: 7 }}>
+              <Stack gap="xl">
+
+                {/* Orange eyebrow */}
+                <Text
+                  size="xs"
+                  fw={700}
                   style={{
-                    backgroundColor: '#252522',
-                    border: i === 0
-                      ? '1px solid #3a3a37'
-                      : '1px solid #2e2e2b',
-                    borderLeft: i === 0 ? `3px solid ${ORANGE}` : undefined,
-                    borderRadius: 12,
+                    color: ORANGE,
+                    letterSpacing: '0.13em',
+                    textTransform: 'uppercase',
                     fontFamily: 'Geist, sans-serif',
                   }}
                 >
-                  {/* Icon badge */}
-                  <Box
-                    mb="md"
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 10,
-                      backgroundColor: i === 0 ? 'rgba(200, 90, 26, 0.18)' : 'rgba(200, 90, 26, 0.15)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: i === 0
-                        ? '0 0 12px 3px rgba(200, 90, 26, 0.45), 0 0 28px 6px rgba(200, 90, 26, 0.2)'
-                        : 'none',
-                    }}
-                  >
-                    <Icon size={22} color={ORANGE} />
+                  Built Different
+                </Text>
+
+                {/* Title */}
+                <Title
+                  order={2}
+                  fz={{ base: 30, sm: 40 }}
+                  fw={800}
+                  lh={1.1}
+                  style={{
+                    color: '#f5f5f3',
+                    fontFamily: 'Geist, sans-serif',
+                    letterSpacing: '-0.02em',
+                    marginTop: -8,
+                  }}
+                >
+                  Everything you need to build smarter
+                </Title>
+
+                {/* Description */}
+                <Text
+                  size="md"
+                  lh={1.8}
+                  style={{
+                    color: '#aaa',
+                    fontFamily: 'Geist, sans-serif',
+                    maxWidth: 500,
+                    marginTop: -4,
+                  }}
+                >
+                  Tell us your budget and use case. Our AI picks real parts, flags
+                  compatibility issues, and gives you budget, mid-range, and performance
+                  options all at once.
+                </Text>
+
+                {/* Stat blocks */}
+                <Group gap={48} mt={4}>
+                  <Box>
+                    <Text
+                      fw={800}
+                      fz={34}
+                      lh={1}
+                      style={{ color: ORANGE, fontFamily: 'Geist, sans-serif' }}
+                    >
+                      1,200+
+                    </Text>
+                    <Text size="sm" style={{ color: '#888', fontFamily: 'Geist, sans-serif' }}>
+                      real parts in database
+                    </Text>
                   </Box>
 
-                  <Text
-                    fw={600}
-                    mb={6}
-                    style={{ color: '#f0ede8', fontFamily: 'Geist, sans-serif' }}
-                  >
-                    {title}
-                  </Text>
-                  <Text
-                    size="sm"
-                    lh={1.65}
-                    style={{ color: '#999', fontFamily: 'Geist, sans-serif' }}
-                  >
-                    {description}
-                  </Text>
-                </Card>
-              </Grid.Col>
-            ))}
+                  <Box>
+                    <Text
+                      fw={800}
+                      fz={34}
+                      lh={1}
+                      style={{ color: ORANGE, fontFamily: 'Geist, sans-serif' }}
+                    >
+                      4
+                    </Text>
+                    <Text size="sm" style={{ color: '#888', fontFamily: 'Geist, sans-serif' }}>
+                      tier options per category
+                    </Text>
+                  </Box>
+                </Group>
+
+              </Stack>
+            </Grid.Col>
           </Grid>
         </Container>
       </Box>
