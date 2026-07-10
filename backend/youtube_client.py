@@ -2,10 +2,8 @@ import os
 
 import requests
 from dotenv import load_dotenv
+from config import YOUTUBE_API_KEY
 
-load_dotenv()
-
-api_key = os.getenv("YOUTUBE_API_KEY")
 search_url = "https://www.googleapis.com/youtube/v3/search"
 
 
@@ -19,12 +17,12 @@ def search_video(query):
     per request small. Search costs 100 quota units a call against a
     10k/day free quota, so don't go looping this over hundreds of parts.
     """
-    if not api_key:
+    if not YOUTUBE_API_KEY:
         print("search_video: no YOUTUBE_API_KEY set, skipping")
         return None
 
     params = {
-        "key": api_key,
+        "key": YOUTUBE_API_KEY,
         "q": query,
         "part": "snippet",
         "type": "video",
