@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=GEMINI_API_KEY)
 model_name = "gemini-2.5-flash"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
