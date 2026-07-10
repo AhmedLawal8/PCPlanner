@@ -19,7 +19,9 @@ def create_app():
         "sqlite:///" + os.path.join(app.instance_path, "pcbuilder.db")
     )
     app.config["SECRET_KEY"] = SECRET_KEY
-
+    app.config["SESSION_COOKIE_SAMESITE"] = "None"
+    app.config["SESSION_COOKIE_SECURE"] = True
+    
     db.init_app(app)
 
     app.register_blueprint(auth_bp)

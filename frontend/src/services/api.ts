@@ -1,4 +1,6 @@
-const BASE_URL = 'http://localhost:5000'
+
+// const BASE_URL = 'http://localhost:5000' //Local
+const BASE_URL = 'https://ahmedl8.pythonanywhere.com' // Deployed
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

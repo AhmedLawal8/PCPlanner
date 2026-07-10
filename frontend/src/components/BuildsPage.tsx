@@ -50,8 +50,12 @@ export function BuildsPage() {
       })
       .catch((err) => {
         if (!cancelled) {
-          if (err instanceof ApiError && err.status === 401) navigate('/signin')
-          else setFetchError('Failed to load builds.')
+          if (err instanceof ApiError && err.status === 401) {
+            // navigate once, don't let downstream pages loop back here
+            navigate('/signin', { replace: true })
+          } else {
+            setFetchError('Failed to load builds.')
+          }
           setLoading(false)
         }
       })
