@@ -1,27 +1,37 @@
 import { SimpleGrid, Stack, Text } from '@mantine/core'
 import { PartOptionCard } from './PartOptionCard'
-import type { PartCategoryGroup } from '../constants/parts'
+import type { PartCategoryGroup, PartOption } from '../constants/parts'
+
+const CATEGORY_LABELS: Record<string, string> = {
+  cpu: 'CPU',
+  gpu: 'GPU',
+  motherboard: 'Motherboard',
+  ram: 'RAM',
+  storage: 'Storage',
+  psu: 'PSU',
+  case: 'Case',
+  cooler: 'Cooler',
+}
 
 interface PartOptionGroupProps {
   group: PartCategoryGroup
-  selectedIndex: number
-  onSelect: (index: number) => void
+  selectedId: number | undefined
+  onSelect: (option: PartOption) => void
 }
 
-export function PartOptionGroup({ group, selectedIndex, onSelect }: PartOptionGroupProps) {
+export function PartOptionGroup({ group, selectedId, onSelect }: PartOptionGroupProps) {
   return (
     <Stack gap="xs">
-      <Text size="sm" c="dimmed" tt="uppercase">
-        {group.category}
+      <Text size="sm" c="dimmed" tt="uppercase" fw={600}>
+        {CATEGORY_LABELS[group.category] ?? group.category}
       </Text>
-      <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }} spacing="sm">
-        {group.options.map((option, index) => (
+      <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="sm">
+        {group.options.map((option) => (
           <PartOptionCard
-            key={option.name}
+            key={option.id}
             option={option}
-            isRecommended={index === group.recommendedIndex}
-            isSelected={index === selectedIndex}
-            onSelect={() => onSelect(index)}
+            isSelected={option.id === selectedId}
+            onSelect={() => onSelect(option)}
           />
         ))}
       </SimpleGrid>

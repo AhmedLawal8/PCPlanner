@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom'
 import { Alert, Anchor, Button, Center, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
 import { useAuth } from '../contexts/AuthContext'
 import { ApiError } from '../services/api'
 
 export function SignInPage() {
-  const { login } = useAuth()
+  const { login, user, isLoading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/builds'
@@ -14,6 +14,8 @@ export function SignInPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  if (!isLoading && user) return <Navigate to="/builds" replace />
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

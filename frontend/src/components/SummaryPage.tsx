@@ -1,48 +1,300 @@
 import { useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { Container, Stack, Title } from '@mantine/core'
-import { PreferenceChips } from './PreferenceChips'
-import { PartOptionGroup } from './PartOptionGroup'
+import {
+  Accordion,
+  Badge,
+  Box,
+  Container,
+  Divider,
+  Grid,
+  Group,
+  Paper,
+  Progress,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
+import { IconCheck } from '@tabler/icons-react'
 import { AIOverview } from './AIOverview'
-import { MOCK_PART_GROUPS, MOCK_AI_OVERVIEW } from '../constants/parts'
-import type { QuizAnswers } from '../constants/quizOptions'
+import { USE_CASE_OPTIONS } from '../constants/quizOptions'
+import type { GenerateResponse, PartOption, PartTier } from '../constants/parts'
+
+const ORANGE = '#C85A1A'
+
+const CATEGORY_ORDER = ['cpu', 'gpu', 'motherboard', 'ram', 'storage', 'psu', 'case', 'cooler']
+
+const CATEGORY_LABELS: Record<string, string> = {
+  cpu: 'CPU',
+  gpu: 'GPU',
+  motherboard: 'Motherboard',
+  ram: 'RAM',
+  storage: 'Storage',
+  psu: 'PSU',
+  case: 'Case',
+  cooler: 'Cooler',
+}
+
+const TIER_LABELS: Record<PartTier, string> = {
+  budget: 'Budget',
+  best_value: 'Best Value',
+  recommend: 'Recommend',
+  performance: 'Performance',
+}
+
+const TIER_COLORS: Record<PartTier, string> = {
+  budget: 'gray',
+  best_value: 'blue',
+  recommend: 'brandOrange',
+  performance: 'violet',
+}
 
 interface SummaryLocationState {
-  answers: QuizAnswers
+  response: GenerateResponse
+  budget: number
+  useCase: string
+}
+
+interface PartRowProps {
+  option: PartOption
+  isSelected: boolean
+  onSelect: () => void
+}
+
+function PartRow({ option, isSelected, onSelect }: PartRowProps) {
+  return (
+    <UnstyledButton
+      onClick={onSelect}
+      w="100%"
+      style={{
+        borderRadius: 8,
+        border: isSelected
+          ? `1.5px solid ${ORANGE}`
+          : '1px solid var(--mantine-color-gray-3)',
+        backgroundColor: isSelected ? 'var(--mantine-color-brandOrange-0)' : 'transparent',
+        padding: '10px 12px',
+        transition: 'border-color 0.12s, background-color 0.12s',
+      }}
+    >
+      <Stack gap={4}>
+        <Group justify="space-between" wrap="nowrap">
+          <Badge size="xs" color={TIER_COLORS[option.tier]} variant="light">
+            {TIER_LABELS[option.tier]}
+          </Badge>
+          {isSelected && <IconCheck size={13} color={ORANGE} />}
+        </Group>
+        <Text size="sm" fw={isSelected ? 600 : 400} lineClamp={2} lh={1.4}>
+          {option.name}
+        </Text>
+        <Text size="sm" fw={700} c="brandOrange">
+          ${option.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        </Text>
+      </Stack>
+    </UnstyledButton>
+  )
 }
 
 export function SummaryPage() {
   const { state } = useLocation()
-  const answers = (state as SummaryLocationState | null)?.answers
-  const [selections, setSelections] = useState<Record<string, number>>(() =>
-    Object.fromEntries(MOCK_PART_GROUPS.map((group) => [group.category, group.recommendedIndex])),
-  )
+  const locationState = state as SummaryLocationState | null
 
-  if (!answers) {
-    return <Navigate to="/quiz" replace />
-  }
+  const partGroups = locationState
+    ? CATEGORY_ORDER.filter((cat) => locationState.response.parts[cat]).map((cat) => ({
+        category: cat,
+        options: locationState.response.parts[cat],
+      }))
+    : []
+
+  const [selectedParts, setSelectedParts] = useState<Record<string, PartOption>>(() => {
+    if (!locationState) return {}
+    const initial: Record<string, PartOption> = {}
+    for (const group of partGroups) {
+      const pick = group.options.find((o) => o.tier === 'recommend') ?? group.options[0]
+      if (pick) initial[group.category] = pick
+    }
+    return initial
+  })
+
+  if (!locationState) return <Navigate to="/quiz" replace />
+
+  const { response, budget, useCase } = locationState
+  const useCaseLabel = USE_CASE_OPTIONS.find((o) => o.value === useCase)?.label ?? useCase
+  const runningTotal = Object.values(selectedParts).reduce((sum, p) => sum + p.price, 0)
+  const budgetPercent = Math.min(100, Math.round((runningTotal / budget) * 100))
+  const isOverBudget = runningTotal > budget
 
   return (
     <Container size="xl" py="xl">
-      <Title order={2} mb="lg">
-        Your Rigify Summary
+      <Title order={2} mb="sm">
+        Select Your Components
       </Title>
-      <Stack gap="xl">
-        <PreferenceChips answers={answers} />
-        <Stack gap="lg">
-          {MOCK_PART_GROUPS.map((group) => (
-            <PartOptionGroup
-              key={group.category}
-              group={group}
-              selectedIndex={selections[group.category]}
-              onSelect={(index) =>
-                setSelections((prev) => ({ ...prev, [group.category]: index }))
-              }
+      <Group gap="sm" mb="xl">
+        <Badge color="brandOrange" size="lg">
+          {useCaseLabel}
+        </Badge>
+        <Badge color="brandOrange" size="lg">
+          ${budget.toLocaleString()} budget
+        </Badge>
+      </Group>
+
+      <Grid gutter="xl" align="flex-start">
+        {/* Left — component accordions */}
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          <Accordion multiple variant="separated">
+            {partGroups.map((group) => {
+              const selected = selectedParts[group.category]
+              return (
+                <Accordion.Item key={group.category} value={group.category}>
+                  <Accordion.Control>
+                    <Group justify="space-between" pr="sm" wrap="nowrap" gap="sm">
+                      <Text fw={600} style={{ flexShrink: 0 }}>
+                        {CATEGORY_LABELS[group.category] ?? group.category}
+                      </Text>
+                      {selected && (
+                        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                          <Text
+                            size="sm"
+                            c="dimmed"
+                            lineClamp={1}
+                            style={{ minWidth: 0, flex: 1 }}
+                          >
+                            {selected.name}
+                          </Text>
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="brandOrange"
+                            style={{ flexShrink: 0 }}
+                          >
+                            ${selected.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </Text>
+                        </Group>
+                      )}
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap="sm">
+                      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+                        {group.options.map((option) => (
+                          <PartRow
+                            key={option.id}
+                            option={option}
+                            isSelected={option.id === selected?.id}
+                            onSelect={() =>
+                              setSelectedParts((prev) => ({
+                                ...prev,
+                                [group.category]: option,
+                              }))
+                            }
+                          />
+                        ))}
+                      </SimpleGrid>
+                      {selected?.why && (
+                        <Box
+                          p="sm"
+                          style={{
+                            borderRadius: 8,
+                            border: `1px solid ${ORANGE}30`,
+                            backgroundColor: 'var(--mantine-color-brandOrange-0)',
+                          }}
+                        >
+                          <Text size="sm" lh={1.65}>
+                            {selected.why}
+                          </Text>
+                        </Box>
+                      )}
+                    </Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              )
+            })}
+          </Accordion>
+        </Grid.Col>
+
+        {/* Right — build summary */}
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <Paper
+            withBorder
+            p="lg"
+            radius="md"
+            style={{ position: 'sticky', top: 20 }}
+          >
+            <Title order={4} mb="md">
+              Build Summary
+            </Title>
+
+            <Group justify="space-between" mb="xs">
+              <Text size="sm" c="dimmed">
+                Budget
+              </Text>
+              <Text size="sm" fw={600}>
+                ${budget.toLocaleString()}
+              </Text>
+            </Group>
+
+            <Divider mb="md" />
+
+            <Text size="xs" c="dimmed" mb={6}>
+              Budget used
+            </Text>
+            <Progress
+              value={budgetPercent}
+              color={isOverBudget ? 'red' : budgetPercent > 85 ? 'yellow' : 'brandOrange'}
+              size="sm"
+              radius="xl"
+              mb={4}
             />
-          ))}
-        </Stack>
-        <AIOverview text={MOCK_AI_OVERVIEW} />
-      </Stack>
+            <Group justify="space-between" mb="lg">
+              <Text size="xs" c={isOverBudget ? 'red' : 'dimmed'}>
+                ${runningTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </Text>
+              <Text size="xs" fw={600} c={isOverBudget ? 'red' : 'dimmed'}>
+                {isOverBudget ? `+$${(runningTotal - budget).toFixed(0)} over` : `${budgetPercent}%`}
+              </Text>
+            </Group>
+
+            <Divider mb="md" />
+
+            <Stack gap={10} mb="md">
+              {CATEGORY_ORDER.filter((cat) => selectedParts[cat]).map((cat) => (
+                <Group key={cat} justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="xs" fw={600}>
+                      {CATEGORY_LABELS[cat]}
+                    </Text>
+                    <Text size="xs" c="dimmed" lineClamp={1}>
+                      {selectedParts[cat].name}
+                    </Text>
+                  </Stack>
+                  <Text size="xs" fw={600} style={{ flexShrink: 0, paddingTop: 1 }}>
+                    ${selectedParts[cat].price.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                    })}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
+
+            <Divider mb="sm" />
+
+            <Group justify="space-between">
+              <Text fw={700}>Total</Text>
+              <Text fw={700} c={isOverBudget ? 'red' : undefined}>
+                $
+                {runningTotal.toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Text>
+            </Group>
+          </Paper>
+        </Grid.Col>
+      </Grid>
+
+      <Box mt="xl">
+        <AIOverview text={response.summary} />
+      </Box>
     </Container>
   )
 }

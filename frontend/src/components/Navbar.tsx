@@ -1,6 +1,7 @@
 import { Avatar, Anchor, Box, Button, Divider, Group, Text, useMantineTheme } from '@mantine/core'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { modals } from '@mantine/modals'
 
 export function Navbar() {
   const theme = useMantineTheme()
@@ -8,8 +9,16 @@ export function Navbar() {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/')
+    modals.openConfirmModal({
+      title: 'Sign out',
+      children: <Text size="sm">Are you sure you want to sign out?</Text>,
+      labels: { confirm: 'Sign out', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        await logout()
+        navigate('/')
+      },
+    })
   }
 
   return (

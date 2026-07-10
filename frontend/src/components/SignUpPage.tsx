@@ -1,17 +1,19 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { Alert, Anchor, Button, Center, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
 import { useAuth } from '../contexts/AuthContext'
 import { ApiError } from '../services/api'
 
 export function SignUpPage() {
-  const { register } = useAuth()
+  const { register, user, isLoading } = useAuth()
   const navigate = useNavigate()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  if (!isLoading && user) return <Navigate to="/quiz" replace />
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
