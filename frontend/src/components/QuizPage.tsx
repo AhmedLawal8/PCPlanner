@@ -1,43 +1,60 @@
 import { useState } from 'react'
-import { Button, Container, Group, Stack, Title } from '@mantine/core'
+import { Alert, Button, Container, Group, Stack, Title } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
 import { UsageQuestion } from './UsageQuestion'
 import { BudgetQuestion } from './BudgetQuestion'
-import { PriorityQuestion } from './PriorityQuestion'
-import type { QuizAnswers } from '../constants/quizOptions'
+import { api, ApiError } from '../services/api'
+import type { GenerateResponse } from '../constants/parts'
 
 export function QuizPage() {
   const navigate = useNavigate()
-  const [answers, setAnswers] = useState<QuizAnswers>({
-    useCase: null,
-    budget: 1500,
-    priority: null,
-  })
+  const [useCase, setUseCase] = useState<string | null>(null)
+  const [budget, setBudget] = useState(1500)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleContinue = () => navigate('/summary', { state: { answers } })
-  const canSubmit = answers.useCase !== null && answers.priority !== null
+  const handleGenerate = async () => {
+    if (!useCase) return
+    setError(null)
+    setLoading(true)
+    try {
+      const response = await api.post<GenerateResponse>('/api/builds/generate', {
+        budget,
+        use_case: useCase,
+      })
+      navigate('/summary', { state: { response, budget, useCase } })
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Failed to generate build. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <Container size="sm" py="xl">
       <Title order={2} mb="lg">
-        PC Build Quiz
+        Build Your PC
       </Title>
       <Stack gap="xl">
-        <UsageQuestion
-          value={answers.useCase}
-          onChange={(useCase) => setAnswers((answer) => ({ ...answer, useCase }))}
-        />
-        <BudgetQuestion
-          value={answers.budget}
-          onChange={(budget) => setAnswers((answer) => ({ ...answer, budget }))}
-        />
-        <PriorityQuestion
-          value={answers.priority}
-          onChange={(priority) => setAnswers((answer) => ({ ...answer, priority }))}
-        />
+        <UsageQuestion value={useCase} onChange={setUseCase} />
+        <BudgetQuestion value={budget} onChange={setBudget} />
+        {error && (
+          <Alert color="red" variant="light">
+            {error}
+          </Alert>
+        )}
         <Group justify="center">
-          <Button onClick={handleContinue} disabled={!canSubmit}>
-            Continue
+          <Button
+            onClick={handleGenerate}
+            disabled={!useCase}
+            loading={loading}
+            size="lg"
+          >
+            Generate Build
           </Button>
         </Group>
       </Stack>

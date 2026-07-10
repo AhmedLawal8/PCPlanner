@@ -1,92 +1,116 @@
+export type PartTier = 'budget' | 'best_value' | 'recommend' | 'performance'
+
 export interface PartOption {
+  id: number
   name: string
   price: number
+  tier: PartTier
+  why: string
 }
 
 export interface PartCategoryGroup {
   category: string
   options: PartOption[]
-  recommendedIndex: number
 }
 
-export const MOCK_PART_GROUPS: PartCategoryGroup[] = [
-  {
-    category: 'CPU',
-    recommendedIndex: 0,
-    options: [
-      { name: 'AMD Ryzen 7 7800X3D', price: 379.99 },
-      { name: 'AMD Ryzen 5 7600X', price: 229.99 },
-      { name: 'Intel Core i5-14600K', price: 289.99 },
-      { name: 'Intel Core i7-14700K', price: 389.99 },
-      { name: 'AMD Ryzen 9 7900X', price: 429.99 },
-    ],
-  },
-  {
-    category: 'Motherboard',
-    recommendedIndex: 0,
-    options: [
-      { name: 'ASUS ROG Strix B650E-F', price: 249.99 },
-      { name: 'MSI PRO B650-P WiFi', price: 159.99 },
-      { name: 'Gigabyte B650 Aorus Elite AX', price: 189.99 },
-      { name: 'ASRock B650M Pro RS', price: 129.99 },
-      { name: 'ASUS TUF Gaming X670E-Plus', price: 299.99 },
-    ],
-  },
-  {
-    category: 'GPU',
-    recommendedIndex: 0,
-    options: [
-      { name: 'NVIDIA GeForce RTX 4070 Super', price: 599.99 },
-      { name: 'AMD Radeon RX 7800 XT', price: 499.99 },
-      { name: 'NVIDIA GeForce RTX 4060 Ti', price: 399.99 },
-      { name: 'NVIDIA GeForce RTX 4070 Ti Super', price: 799.99 },
-      { name: 'AMD Radeon RX 7900 GRE', price: 549.99 },
-    ],
-  },
-  {
-    category: 'RAM',
-    recommendedIndex: 0,
-    options: [
-      { name: 'Corsair Vengeance 32GB DDR5-6000', price: 109.99 },
-      { name: 'G.Skill Trident Z5 32GB DDR5-6000', price: 119.99 },
-      { name: 'Kingston Fury Beast 32GB DDR5-5600', price: 94.99 },
-      { name: 'Corsair Vengeance 64GB DDR5-6000', price: 199.99 },
-      { name: 'G.Skill Ripjaws S5 32GB DDR5-6400', price: 129.99 },
-    ],
-  },
-  {
-    category: 'Storage',
-    recommendedIndex: 0,
-    options: [
-      { name: 'Samsung 990 Pro 2TB NVMe SSD', price: 149.99 },
-      { name: 'WD Black SN850X 1TB NVMe SSD', price: 89.99 },
-      { name: 'Crucial T500 2TB NVMe SSD', price: 129.99 },
-      { name: 'Samsung 990 Pro 4TB NVMe SSD', price: 299.99 },
-      { name: 'Seagate FireCuda 530 1TB NVMe SSD', price: 99.99 },
-    ],
-  },
-  {
-    category: 'PSU',
-    recommendedIndex: 0,
-    options: [
-      { name: 'Corsair RM850x', price: 139.99 },
-      { name: 'EVGA SuperNOVA 750 G6', price: 109.99 },
-      { name: 'be quiet! Straight Power 12 850W', price: 159.99 },
-      { name: 'Corsair RM1000x', price: 189.99 },
-      { name: 'MSI MAG A750GL PCIE5', price: 99.99 },
-    ],
-  },
-  {
-    category: 'Case',
-    recommendedIndex: 0,
-    options: [
-      { name: 'NZXT H5 Flow', price: 94.99 },
-      { name: 'Fractal Design Pop Air', price: 89.99 },
-      { name: 'Lian Li Lancool 216', price: 109.99 },
-      { name: 'Corsair 4000D Airflow', price: 104.99 },
-      { name: 'Phanteks P400A', price: 79.99 },
-    ],
-  },
+export interface GenerateResponse {
+  parts: Record<string, PartOption[]>
+  total_price: number
+  summary: string
+}
+
+// ── Saved build types ─────────────────────────────────────────────────────────
+
+export interface SavedBuildPart {
+  id: number
+  name: string
+  price: number
+}
+
+export interface SavedBuild {
+  id: number
+  name: string
+  total_price: number
+  summary: string
+  created_at: string
+  parts: Record<string, SavedBuildPart>
+}
+
+export interface PatchBuildResponse extends SavedBuild {
+  warnings: string[]
+}
+
+// ── Shared UI constants ───────────────────────────────────────────────────────
+
+export const CATEGORY_ORDER = [
+  'cpu', 'gpu', 'motherboard', 'ram', 'storage', 'psu', 'case', 'cooler',
 ]
 
-export const MOCK_AI_OVERVIEW = 'Placeholder Summary.'
+export const CATEGORY_LABELS: Record<string, string> = {
+  cpu: 'CPU',
+  gpu: 'GPU',
+  motherboard: 'Motherboard',
+  ram: 'RAM',
+  storage: 'Storage',
+  psu: 'PSU',
+  case: 'Case',
+  cooler: 'Cooler',
+}
+
+export interface FieldConfig {
+  key: string
+  label: string
+  format?: (val: unknown) => string
+}
+
+export const COMPONENT_FIELDS: Record<string, FieldConfig[]> = {
+  cpu: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'cores', label: 'Cores' },
+    { key: 'base_clock', label: 'Base Clock', format: (v) => `${v} GHz` },
+    { key: 'boost_clock', label: 'Boost Clock', format: (v) => `${v} GHz` },
+    { key: 'wattage', label: 'TDP', format: (v) => `${v}W` },
+    { key: 'socket', label: 'Socket' },
+  ],
+  motherboard: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'socket', label: 'Socket' },
+    { key: 'type', label: 'Type' },
+    { key: 'memory_type', label: 'Memory Type' },
+    { key: 'max_memory', label: 'Max Memory', format: (v) => `${v} GB` },
+  ],
+  gpu: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'vram', label: 'VRAM', format: (v) => `${v} GB` },
+    { key: 'wattage', label: 'TDP', format: (v) => `${v}W` },
+    { key: 'chipset', label: 'Chipset' },
+  ],
+  ram: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'capacity', label: 'Capacity', format: (v) => `${v} GB` },
+    { key: 'speed', label: 'Speed', format: (v) => `${v} MHz` },
+    { key: 'memory_type', label: 'Memory Type' },
+  ],
+  storage: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'capacity', label: 'Capacity', format: (v) => `${v} GB` },
+    { key: 'drive_type', label: 'Drive Type' },
+    { key: 'interface', label: 'Interface' },
+  ],
+  psu: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'wattage', label: 'Wattage', format: (v) => `${v}W` },
+    { key: 'efficiency_rating', label: 'Efficiency' },
+  ],
+  case: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'case_type', label: 'Type' },
+    { key: 'color', label: 'Color' },
+  ],
+  cooler: [
+    { key: 'price', label: 'Price', format: (v) => `$${Number(v).toFixed(2)}` },
+    { key: 'rpm', label: 'Fan Speed', format: (v) => `${v} RPM` },
+    { key: 'noise_level', label: 'Noise', format: (v) => `${v} dB` },
+    { key: 'radiator_size', label: 'Radiator', format: (v) => `${v} mm` },
+  ],
+}

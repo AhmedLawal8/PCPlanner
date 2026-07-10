@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from models.db import db
 from models.tables import Build
 from generate_build import check_compatibility
+from .auth import login_required
 
 builds_bp = Blueprint("builds", __name__, url_prefix="/api/builds")
 
@@ -17,12 +18,7 @@ CATEGORY_TO_FK = {
     "cooler":      "cooler_id",
 }
 
-def login_required():
-    """Returns (user_id, None) if logged in, or (None, error_response) if not."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return None, (jsonify({"error": "Login required."}), 401)
-    return user_id, None
+
 
 def serialize_build(build):
     # Turn a Build row into a JSON-friendly dict with full part details.

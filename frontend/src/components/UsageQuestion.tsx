@@ -13,7 +13,7 @@ export function UsageQuestion({ value, onChange }: UsageQuestionProps) {
       value={value}
       onChange={onChange}
     >
-      <Stack mt="=sm">
+      <Stack mt="sm">
         {USE_CASE_OPTIONS.map((option) => (
           <Radio key={option.value} value={option.value} label={option.label} />
         ))}
