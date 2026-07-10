@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from models.db import db
 from models.tables import Build
-from generate_build import check_compatibility
+from generate_build import check_compatibility, CATEGORY_MODELS
 from .auth import login_required
 
 builds_bp = Blueprint("builds", __name__, url_prefix="/api/builds")
@@ -40,6 +40,33 @@ def serialize_build(build):
         "created_at":  build.created_at.isoformat(),
         "parts":       parts,
     }
+
+# POST /api/builds/check-compatibility
+# Expects: { cpu_id, gpu_id, motherboard_id, ram_id, psu_id, case_id, ... }
+# (any category may be missing, that category just gets skipped). No
+# login required, no DB writes, just a live compatibility read for
+# whatever's currently selected on the summary page, before it's ever
+# saved as a real Build.
+@builds_bp.route("/check-compatibility", methods=["POST"])
+def check_compatibility_route():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON."}), 400
+
+    selected = {}
+    for category, fk_col in CATEGORY_TO_FK.items():
+        part_id = data.get(f"{category}_id")
+        if part_id is None:
+            continue
+        model = CATEGORY_MODELS.get(category)
+        if model is None:
+            continue
+        part = model.query.get(part_id)
+        if part is not None:
+            selected[category] = part
+
+    warnings = check_compatibility(selected)
+    return jsonify({"compatible": not warnings, "warnings": warnings})
 
 # POST /api/builds/generate
 @builds_bp.route("/generate", methods=["POST"])
