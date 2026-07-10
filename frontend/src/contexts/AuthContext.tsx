@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../services/api'
 
@@ -19,8 +19,22 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  // isLoading is false immediately — no /api/auth/me endpoint yet, so session doesn't restore on refresh
-  const isLoading = false
+  const [isLoading, setIsLoading] = useState(true)
+  
+  useEffect(() => {
+  async function restoreSession() {
+      try {
+        const data = await api.get<User>("/api/auth/me")
+        setUser(data)
+      } catch {
+        setUser(null)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    restoreSession()
+  }, [])
 
   const login = async (username: string, password: string) => {
     const data = await api.post<User>('/api/auth/login', { username, password })

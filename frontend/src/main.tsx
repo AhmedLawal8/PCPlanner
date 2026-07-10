@@ -7,12 +7,15 @@ import '@mantine/carousel/styles.css'
 import './index.css'
 import { theme } from './theme.ts'
 import App from './App.tsx'
+import { AuthProvider } from './contexts/AuthContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider theme={theme}>
       <BrowserRouter>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </BrowserRouter>
     </MantineProvider>
   </StrictMode>,

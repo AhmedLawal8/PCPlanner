@@ -19,7 +19,7 @@ export function SummaryPage() {
   )
 
   if (!answers) {
-    return <Navigate to="/build" replace />
+    return <Navigate to="/quiz" replace />
   }
 
   return (

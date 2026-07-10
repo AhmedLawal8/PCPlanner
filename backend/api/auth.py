@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session
-
+from models.tables import Users
 from .helper_auth import create_account, verify_login, get_user
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth") #create a blueprint for routes to prevent having long app.py
@@ -12,7 +12,7 @@ def get_current_user():
     if user_id is None:
         return jsonify({"error": "Not authenticated"}), 401
 
-    user = User.query.get(user_id)
+    user = Users.query.get(user_id)
 
     if user is None:
         session.clear()
