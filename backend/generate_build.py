@@ -150,40 +150,49 @@ def recommend_build(total_budget, use_case):
 
     # CPU first - no constraints
     cpu_candidates = recommend_parts("cpu", allocations["cpu"], require_igpu=igpu_only_cpu)
-    
-    # Derive the sockets present in the CPU pool
+
     cpu_sockets = {c.socket for c in cpu_candidates if c.socket}
 
-    # Motherboard - must match one of those sockets
     mobo_query = Motherboard.query.filter(
         Motherboard.price <= allocations["motherboard"] * (1 + UPPER_WINDOW_PCT),
-        Motherboard.socket.in_(cpu_sockets)
-    ).order_by(Motherboard.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
-    mobo_candidates = select_representative_parts(mobo_query, allocations["motherboard"])
+    )
+    if cpu_sockets:
+        mobo_query = mobo_query.filter(Motherboard.socket.in_(cpu_sockets))
+    mobo_candidates = select_representative_parts(
+        mobo_query.order_by(Motherboard.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all(),
+        allocations["motherboard"],
+    )
 
     # Derive memory types from surviving motherboards
     memory_types = {m.memory_type for m in mobo_candidates if m.memory_type}
 
-    # RAM — must match motherboard memory type
     ram_query = RAM.query.filter(
         RAM.price <= allocations["ram"] * (1 + UPPER_WINDOW_PCT),
-        RAM.memory_type.in_(memory_types)
-    ).order_by(RAM.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
-    ram_candidates = select_representative_parts(ram_query, allocations["ram"])
-    
+    )
+    if memory_types:
+        ram_query = ram_query.filter(RAM.memory_type.in_(memory_types))
+    ram_candidates = select_representative_parts(
+        ram_query.order_by(RAM.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all(),
+        allocations["ram"],
+    )
+
     candidates = {
         "cpu": cpu_candidates,
         "motherboard": mobo_candidates,
         "ram": ram_candidates,
     }
 
-    return {
-        category: recommend_parts(
+    other_categories = {}
+    for category, allocation in allocations.items():
+        if category not in candidates:
+            other_categories[category] = allocation
+
+    for category, allocation in other_categories.items():
+        candidates[category] = recommend_parts(
             category, allocation,
             require_igpu=(category == "cpu" and igpu_only_cpu),
         )
-        for category, allocation in allocations.items()
-    }
+    return candidates
 
 
 
@@ -220,7 +229,21 @@ def serialize_part(category, part):
 #  pick the better fit for that label and give the other the next-closest label.
 
 
-def build_prompt(candidates_by_category, use_case, total_budget):
+# One instruction sentence per quiz "priority" answer, appended to the
+# prompt when present so Gemini's "why" text actually reflects what the
+# user said they care about, instead of that answer going nowhere. Tier
+# assignment itself stays strictly price-rank-based (see prompt below) —
+# priority only shapes the reasoning in the "why" text, not which part
+# gets which tier.
+PRIORITY_GUIDANCE = {
+    "performance": "The user's priority is raw performance (higher core/clock counts, more VRAM, faster storage) — call that out in the why text where relevant.",
+    "value": "The user's priority is price-to-performance value — call out where a part is a particularly good or weak value for its price in the why text.",
+    "quiet": "The user's priority is quiet, efficient components (lower noise_level coolers/cases, higher-efficiency PSUs) — call that out in the why text where relevant.",
+    "aesthetics": "The user's priority is appearance (case/cooler color, styling) — call that out in the why text where relevant.",
+}
+
+
+def build_prompt(candidates_by_category, use_case, total_budget, priority=None):
     """Build the single prompt asking Gemini to pick one part per
     category, from the given shortlist only."""
 
@@ -236,6 +259,7 @@ def build_prompt(candidates_by_category, use_case, total_budget):
         sections.append(f"{category}:\n{json.dumps(serialized, indent=2)}")
 
     parts_block = "\n\n".join(sections)
+    priority_sentence = PRIORITY_GUIDANCE.get(priority, "")
 
     # Build a compact example block showing the expected shape for two
     # categories so Gemini has a concrete template to follow.
@@ -261,7 +285,8 @@ def build_prompt(candidates_by_category, use_case, total_budget):
         f"second most expensive = 'best_value', most expensive = 'performance'. "
         "The 'why' sentence should explain the "
         "performance or value tradeoff for that price point given this use case "
-        "it is NOT used to justify the tier assignment. You may only reference parts that "
+        f"it is NOT used to justify the tier assignment. {priority_sentence} "
+        "You may only reference parts that "
         'appear in these lists, copying the "name" field exactly. '
         "Consider compatibility (socket, memory_type, PSU wattage) and "
         "value for money.\n\n"
@@ -347,12 +372,12 @@ def build_option_group(category, candidates, ai_result):
 # almost exactly, name/price/recommendedIndex line up already. the one
 # new thing frontend needs to add is a "note" field on PartOption to
 # actually show the per-option AI commentary that's now in the response
-def generate_build(total_budget, use_case):
+def generate_build(total_budget, use_case, priority=None):
     """Get candidates, ask Gemini for notes on each option, build result."""
     candidates_by_category = recommend_build(total_budget, use_case)
 
     try:
-        prompt = build_prompt(candidates_by_category, use_case, total_budget)
+        prompt = build_prompt(candidates_by_category, use_case, total_budget, priority)
         # search grounding off on purpose. the free tier gives zero
         # search-grounding quota for the model family we're on right now
         # (confirmed on the rate limit dashboard, not a usage issue, a

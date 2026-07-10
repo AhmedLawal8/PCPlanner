@@ -30,4 +30,7 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True)
+    # Not 5000: macOS's AirPlay Receiver (ControlCenter) permanently
+    # listens there, which causes "address already in use" or requests
+    # silently going to the wrong service.
+    app.run(debug=True, port=8000)
