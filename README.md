@@ -48,17 +48,39 @@ YOUTUBE_API_KEY=your-youtube-key
 ```bash
 cd backend
 
-# install dependencies
+# Create a virtual environment
+python -m venv venv
+```
+
+**Activate the virtual environment**
+
+**macOS / Linux**
+```bash
+source venv/bin/activate
+```
+
+**Windows (PowerShell)**
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt)**
+```cmd
+venv\Scripts\activate.bat
+```
+
+```bash
+# Install dependencies
 pip install -r ../requirements.txt
 
-# populate the database (grabs part data + enriches with API calls - takes a few minutes)
+# Populate the database (downloads part data and enriches it with API calls - this takes a few minutes)
 python filltables.py
 
-# start the Flask server
+# Start the Flask server
 python app.py
 ```
 
-The API will be running at `http://localhost:5000` or `http://127.0.0.1:5000`.
+The API will be available locally at: http://localhost:5000 or http://127.0.0.1:5000
 
 ---
 
