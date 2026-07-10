@@ -71,7 +71,7 @@ venv\Scripts\activate.bat
 
 ```bash
 # Install dependencies
-pip install -r ../requirements.txt
+pip install -r requirements.txt
 
 # Populate the database (downloads part data and enriches it with API calls - this takes a few minutes)
 python filltables.py
