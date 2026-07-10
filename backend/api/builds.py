@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from models.db import db
 from models.tables import Build
+from generate_build import check_compatibility
 
 builds_bp = Blueprint("builds", __name__, url_prefix="/api/builds")
 
@@ -26,7 +27,7 @@ def login_required():
 def serialize_build(build):
     # Turn a Build row into a JSON-friendly dict with full part details.
     parts = {}
-    for category, fk_col in CATEGORY_TO_FK.items():
+    for category in CATEGORY_TO_FK:
         part = getattr(build, category)  # uses the relationship, e.g. build.cpu
         if part is not None:
             parts[category] = {
@@ -152,8 +153,8 @@ def delete_build(build_id):
     db.session.commit()
     return jsonify({"message": "Build deleted."})
 
-# PATCH /api/builds/<id>   — rename or swap component(s)
-# Accepts any combo of: { name, cpu_id, gpu_id, ... }
+# PATCH /api/builds/build_id   — rename or swap component(s)
+# Accepts any combo of: { name: "", cpu: "", gpu: "", ... }
 @builds_bp.route("/<int:build_id>", methods=["PATCH"]) # Use patch since user might change one component instead of sending whole resource
 def update_build(build_id):
     user_id, err = login_required()
@@ -173,11 +174,10 @@ def update_build(build_id):
         build.name = (data["name"] or "My Build").strip() or "My Build"
 
     # allow swapping any individual component by passing its FK column directly
-    # e.g { "cpu_id": 42 }
-    valid_fk_cols = set(CATEGORY_TO_FK.values())
-    for key, value in data.items():
-        if key in valid_fk_cols:
-            setattr(build, key, value)
+    # e.g { "cpu": 42 }
+    for category, fk_col in CATEGORY_TO_FK.items():
+        if category in data:
+            setattr(build, fk_col, data[category])
 
     # Recalculate total price from the relationships
     total = 0
@@ -187,6 +187,14 @@ def update_build(build_id):
             total += part.price
     build.total_price = round(total, 2)
 
+    selected = {
+        category: getattr(build, category)
+        for category in CATEGORY_TO_FK
+        if getattr(build, category) is not None
+    }
+    
+    warnings = check_compatibility(selected)
     db.session.commit()
-    return jsonify(serialize_build(build))
+
+    return jsonify({**serialize_build(build), "warnings": warnings})
 
