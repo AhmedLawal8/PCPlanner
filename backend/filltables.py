@@ -2,6 +2,9 @@ import json
 import os
 
 from app import create_app
+from enrich_compat import (
+    enrich_cpu_sockets, enrich_gpu_wattages, enrich_motherboard_memory_types,
+)
 from models.db import db
 from models.tables import (
     CPU, Motherboard, GPU, RAM, Storage, PSU, Case, Cooler,
@@ -167,6 +170,14 @@ def main():
         db.session.bulk_insert_mappings(Cooler, build_coolers())
 
         db.session.commit()
+        print("Raw data loaded.")
+
+        # backfill the fields the scraped data doesn't have (socket,
+        # gpu wattage, motherboard memory type) so a fresh db is fully
+        # ready to go after just running this one file
+        enrich_cpu_sockets()
+        enrich_gpu_wattages()
+        enrich_motherboard_memory_types()
         print("Database complete.")
 
 
