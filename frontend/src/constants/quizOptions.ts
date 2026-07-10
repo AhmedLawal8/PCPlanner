@@ -17,3 +17,12 @@ export const PRIORITY_OPTIONS = [
   { value: 'quiet', label: 'Quiet & Efficient' },
   { value: 'aesthetics', label: 'Aesthetics (RGB / looks)' },
 ]
+
+// The quiz's useCase values don't match the backend's budget-split preset
+// names, so requests to /api/builds/generate need to go through this map.
+export const USE_CASE_TO_BACKEND: Record<string, string> = {
+  gaming: 'gaming',
+  'video-editing': 'production',
+  'general-use': 'general',
+  streaming: 'streaming',
+}
