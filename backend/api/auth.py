@@ -4,6 +4,26 @@ from .helper_auth import create_account, verify_login, get_user
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth") #create a blueprint for routes to prevent having long app.py
 
+# GET /api/auth/me  -- Check if user is logged in
+@auth_bp.get("/me")
+def get_current_user():
+    user_id = session.get("user_id")
+
+    if user_id is None:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user = User.query.get(user_id)
+
+    if user is None:
+        session.clear()
+        return jsonify({"error": "Not authenticated"}), 401
+
+    return jsonify({
+        "id": user.id,
+        "username": user.username,
+    }), 200
+
+
 # POST /api/auth/register -- add a user to the db and create a session
 #Api to register user
 @auth_bp.route("/register", methods=["POST"])
