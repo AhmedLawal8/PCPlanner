@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import {
   Accordion,
@@ -22,7 +22,7 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core'
-import { IconCheck } from '@tabler/icons-react'
+import { IconCheck, IconAlertTriangle } from '@tabler/icons-react'
 import { AIOverview } from './AIOverview'
 import { USE_CASE_OPTIONS } from '../constants/quizOptions'
 import type { GenerateResponse, PartOption, PartTier, PatchBuildResponse, SavedBuild } from '../constants/parts'
@@ -168,10 +168,37 @@ export function SummaryPage() {
   const [savedBuildId, setSavedBuildId] = useState<number | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
+  // live compatibility pill, re-checks with the backend every time the
+  // selected parts change, doesn't matter if the build's been saved yet
+  const [compatCheck, setCompatCheck] = useState<{ compatible: boolean; warnings: string[] } | null>(null)
+
   // Inline detail state — one panel open at a time, keyed by "category/id"
   const [detailKey, setDetailKey] = useState<{ cat: string; id: number } | null>(null)
   const [detailCache, setDetailCache] = useState<Record<string, ComponentDetail>>({})
   const [loadingKey, setLoadingKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (Object.keys(selectedParts).length === 0) return
+    let cancelled = false
+
+    const payload: Record<string, number> = {}
+    for (const [cat, part] of Object.entries(selectedParts)) {
+      payload[`${cat}_id`] = part.id
+    }
+
+    api
+      .post<{ compatible: boolean; warnings: string[] }>('/api/builds/check-compatibility', payload)
+      .then((result) => {
+        if (!cancelled) setCompatCheck(result)
+      })
+      .catch(() => {
+        if (!cancelled) setCompatCheck(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedParts])
 
   if (!locationState) return <Navigate to="/quiz" replace />
 
@@ -287,18 +314,34 @@ export function SummaryPage() {
       <Title order={2} mb="sm">
         Select Your Components
       </Title>
-      <Group gap="sm" mb="xl">
-        <Badge color="brandOrange" size="lg">
-          {useCaseLabel}
-        </Badge>
-        <Badge color="brandOrange" size="lg">
-          ${budget.toLocaleString()} budget
-        </Badge>
+      <Group justify="space-between" mb="xl" wrap="wrap" gap="sm">
+        <Group gap="sm">
+          <Badge color="brandOrange" size="lg">
+            {useCaseLabel}
+          </Badge>
+          <Badge color="brandOrange" size="lg">
+            ${budget.toLocaleString()} budget
+          </Badge>
+        </Group>
+        {compatCheck && (
+          <Badge
+            color={compatCheck.compatible ? 'green' : 'red'}
+            size="lg"
+            variant="light"
+            leftSection={
+              compatCheck.compatible ? <IconCheck size={13} /> : <IconAlertTriangle size={13} />
+            }
+          >
+            {compatCheck.compatible
+              ? 'All parts compatible'
+              : `${compatCheck.warnings.length} compatibility issue${compatCheck.warnings.length > 1 ? 's' : ''}`}
+          </Badge>
+        )}
       </Group>
 
-      {warnings.length > 0 && (
+      {(warnings.length > 0 || (compatCheck && !compatCheck.compatible)) && (
         <Stack gap="xs" mb="xl">
-          {warnings.map((w, i) => (
+          {(compatCheck && !compatCheck.compatible ? compatCheck.warnings : warnings).map((w, i) => (
             <Alert key={i} color="yellow" variant="light">
               {w}
             </Alert>

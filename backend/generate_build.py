@@ -132,6 +132,74 @@ def get_minimum_budget(use_case):
     return minimum
 
 
+def build_platform_candidates(allocations, igpu_only_cpu):
+    """
+    Picking cpu/motherboard/ram independently, like every other category
+    does, can land you a CPU tier and a motherboard tier that don't
+    actually fit together (Intel CPU next to an AMD board), since each
+    one just grabs whatever's closest to its own budget with no clue what
+    the other picked. So instead we build all three together here.
+
+    Returns (cpu_candidates, mobo_candidates, ram_candidates, links).
+    links is {"cpu_to_mobo": {cpu_id: mobo_id}, "mobo_to_ram": {mobo_id: ram_id}}
+    so generate_build() can carry a CPU's tier over to whichever specific
+    board/RAM it was actually paired with here.
+    """
+    mobo_ceiling = allocations["motherboard"] * (1 + UPPER_WINDOW_PCT)
+    available_sockets = {
+        row[0] for row in
+        Motherboard.query.filter(Motherboard.price <= mobo_ceiling)
+        .with_entities(Motherboard.socket).distinct().all()
+        if row[0]
+    }
+
+    cpu_query = CPU.query.filter(
+        CPU.price <= allocations["cpu"] * (1 + UPPER_WINDOW_PCT),
+        CPU.socket.in_(available_sockets),
+    )
+    if igpu_only_cpu:
+        cpu_query = cpu_query.filter(CPU.graphics.isnot(None))
+    cpu_pool = cpu_query.order_by(CPU.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
+    cpu_candidates = select_representative_parts(cpu_pool, allocations["cpu"])
+
+    mobo_candidates = []
+    cpu_to_mobo = {}
+    for cpu in cpu_candidates:
+        mobo_options = Motherboard.query.filter(
+            Motherboard.socket == cpu.socket, Motherboard.price <= mobo_ceiling,
+        ).all()
+        mobo = min(
+            mobo_options, key=lambda m: abs((m.price or 0) - allocations["motherboard"]),
+            default=None,
+        )
+        if mobo is None:
+            continue
+        cpu_to_mobo[cpu.id] = mobo.id
+        if mobo not in mobo_candidates:
+            mobo_candidates.append(mobo)
+
+    # pull RAM from every memory_type across the chosen boards, not just
+    # the closest single stick, or multiple DDR5 boards collapse to 1 pick
+    memory_types = {m.memory_type for m in mobo_candidates if m.memory_type}
+    ram_pool = RAM.query.filter(
+        RAM.price <= allocations["ram"] * (1 + UPPER_WINDOW_PCT),
+        RAM.memory_type.in_(memory_types),
+    ).order_by(RAM.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
+    ram_candidates = select_representative_parts(ram_pool, allocations["ram"])
+
+    mobo_to_ram = {}
+    for mobo in mobo_candidates:
+        if not mobo.memory_type:
+            continue
+        matches = [r for r in ram_candidates if r.memory_type == mobo.memory_type]
+        if matches:
+            closest = min(matches, key=lambda r: abs((r.price or 0) - allocations["ram"]))
+            mobo_to_ram[mobo.id] = closest.id
+
+    links = {"cpu_to_mobo": cpu_to_mobo, "mobo_to_ram": mobo_to_ram}
+    return cpu_candidates, mobo_candidates, ram_candidates, links
+
+
 def recommend_build(total_budget, use_case):
     """
     Given a total budget and use case, return a dict mapping each category
@@ -148,42 +216,23 @@ def recommend_build(total_budget, use_case):
     allocations = allocate_budget(total_budget, use_case)
     igpu_only_cpu = requires_igpu(use_case)
 
-    # CPU first - no constraints
-    cpu_candidates = recommend_parts("cpu", allocations["cpu"], require_igpu=igpu_only_cpu)
-    
-    # Derive the sockets present in the CPU pool
-    cpu_sockets = {c.socket for c in cpu_candidates if c.socket}
-
-    # Motherboard - must match one of those sockets
-    mobo_query = Motherboard.query.filter(
-        Motherboard.price <= allocations["motherboard"] * (1 + UPPER_WINDOW_PCT),
-        Motherboard.socket.in_(cpu_sockets)
-    ).order_by(Motherboard.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
-    mobo_candidates = select_representative_parts(mobo_query, allocations["motherboard"])
-
-    # Derive memory types from surviving motherboards
-    memory_types = {m.memory_type for m in mobo_candidates if m.memory_type}
-
-    # RAM — must match motherboard memory type
-    ram_query = RAM.query.filter(
-        RAM.price <= allocations["ram"] * (1 + UPPER_WINDOW_PCT),
-        RAM.memory_type.in_(memory_types)
-    ).order_by(RAM.price.desc()).limit(CANDIDATE_POOL_SIZE * 3).all()
-    ram_candidates = select_representative_parts(ram_query, allocations["ram"])
-    
     candidates = {
-        "cpu": cpu_candidates,
-        "motherboard": mobo_candidates,
-        "ram": ram_candidates,
-    }
-
-    return {
         category: recommend_parts(
             category, allocation,
             require_igpu=(category == "cpu" and igpu_only_cpu),
         )
         for category, allocation in allocations.items()
+        if category not in ("cpu", "motherboard", "ram")
     }
+
+    cpu_candidates, mobo_candidates, ram_candidates, platform_links = (
+        build_platform_candidates(allocations, igpu_only_cpu)
+    )
+    candidates["cpu"] = cpu_candidates
+    candidates["motherboard"] = mobo_candidates
+    candidates["ram"] = ram_candidates
+
+    return candidates, platform_links
 
 
 
@@ -347,9 +396,43 @@ def build_option_group(category, candidates, ai_result):
 # almost exactly, name/price/recommendedIndex line up already. the one
 # new thing frontend needs to add is a "note" field on PartOption to
 # actually show the per-option AI commentary that's now in the response
+def _force_recommended_tier(options, target_id):
+    """Make the option with id == target_id the "recommend" one, demoting
+    whichever option currently holds that tier (if it's a different id).
+    Used to carry the recommended CPU's paired motherboard/RAM forward as
+    the recommended pick for those categories too, see generate_build."""
+    if target_id is None or not options:
+        return
+    for option in options:
+        if option["tier"] == "recommend" and option["id"] != target_id:
+            option["tier"] = "budget"
+    for option in options:
+        if option["id"] == target_id:
+            option["tier"] = "recommend"
+            return
+
+
+def _find_matching_option_id(options, rows_by_id, attr, target_value):
+    """Fallback for when build_platform_candidates() didn't record a
+    pairing for this specific part (e.g. no RAM was affordable when that
+    motherboard was being paired up). Look for any candidate in `options`
+    whose real row shares the given attribute (socket/memory_type) with
+    target_value, space-insensitive since sources format these
+    differently ("LGA 1700" vs "LGA1700")."""
+    if not target_value:
+        return None
+    normalized_target = target_value.replace(" ", "")
+    for option in options or []:
+        row = rows_by_id.get(option["id"])
+        value = getattr(row, attr, None) if row is not None else None
+        if value and value.replace(" ", "") == normalized_target:
+            return option["id"]
+    return None
+
+
 def generate_build(total_budget, use_case):
     """Get candidates, ask Gemini for notes on each option, build result."""
-    candidates_by_category = recommend_build(total_budget, use_case)
+    candidates_by_category, platform_links = recommend_build(total_budget, use_case)
 
     try:
         prompt = build_prompt(candidates_by_category, use_case, total_budget)
@@ -374,10 +457,65 @@ def generate_build(total_budget, use_case):
         options = build_option_group(category, candidates, ai_result)
         parts[category] = options
 
+    # Gemini picks "recommend" per category on its own, so it can tag a
+    # CPU and a motherboard that were never actually paired. Force the
+    # motherboard/RAM tiers to match whichever board/RAM the recommended
+    # CPU was actually built with.
+    cpu_options = parts.get("cpu")
+    if cpu_options:
+        mobo_rows = {m.id: m for m in candidates_by_category.get("motherboard", [])}
+        ram_rows = {r.id: r for r in candidates_by_category.get("ram", [])}
+        cpu_to_mobo = platform_links["cpu_to_mobo"]
+        mobo_to_ram = platform_links["mobo_to_ram"]
+
+        # prefer a CPU whose whole chain actually has RAM available,
+        # otherwise we'd recommend one whose only board has no RAM in budget
+        fully_paired_ids = {
+            cpu_id for cpu_id, mobo_id in cpu_to_mobo.items()
+            if mobo_id in mobo_to_ram
+        }
+        recommended_cpu = (
+            next((o for o in cpu_options
+                  if o["tier"] == "recommend" and o["id"] in fully_paired_ids), None)
+            or next((o for o in cpu_options if o["id"] in fully_paired_ids), None)
+            or next((o for o in cpu_options if o["tier"] == "recommend"), cpu_options[0])
+        )
+        _force_recommended_tier(cpu_options, recommended_cpu["id"])
+
+        mobo_options = parts.get("motherboard", [])
+        mobo_id = cpu_to_mobo.get(recommended_cpu["id"])
+        if mobo_id is None:
+            cpu_row = next(
+                (c for c in candidates_by_category.get("cpu", [])
+                 if c.id == recommended_cpu["id"]), None,
+            )
+            if cpu_row is not None:
+                mobo_id = _find_matching_option_id(
+                    mobo_options, mobo_rows, "socket", cpu_row.socket
+                )
+        _force_recommended_tier(mobo_options, mobo_id)
+
+        recommended_mobo = next(
+            (o for o in mobo_options if o["tier"] == "recommend"), None,
+        )
+        ram_options = parts.get("ram", [])
+        ram_id = None
+        if recommended_mobo is not None:
+            ram_id = mobo_to_ram.get(recommended_mobo["id"])
+            if ram_id is None:
+                mobo_row = mobo_rows.get(recommended_mobo["id"])
+                if mobo_row is not None:
+                    ram_id = _find_matching_option_id(
+                        ram_options, ram_rows, "memory_type", mobo_row.memory_type
+                    )
+        _force_recommended_tier(ram_options, ram_id)
+
+    for category, options in parts.items():
+        if not options:
+            continue
         recommended = next(
             (o for o in options if o["tier"] == "recommend"), options[0]
         )
-
         total_price += recommended["price"] or 0
 
     return {
