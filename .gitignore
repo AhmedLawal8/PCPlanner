@@ -7,3 +7,4 @@ schema-fields.txt
 instance/
 *.db
 backend/generate_build.md
+cookies.txt
