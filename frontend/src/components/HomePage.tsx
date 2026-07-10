@@ -201,7 +201,7 @@ export function HomePage() {
                       lh={1}
                       style={{ color: ORANGE, fontFamily: 'Geist, sans-serif' }}
                     >
-                      1,200+
+                      3,000+
                     </Text>
                     <Text size="sm" style={{ color: '#888', fontFamily: 'Geist, sans-serif' }}>
                       real parts in database
