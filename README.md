@@ -1,5 +1,4 @@
 # Rigify
----
 
 An intelligent PC builder that generates personalized, fully compatible builds based on your budget and use case. Every component includes AI-selected Budget, Best Value, Recommended, and Performance alternatives, giving you complete flexibility to customize your system. Save your builds, revisit them anytime, and access YouTube content tailored to your exact PC configuration.
 
@@ -10,8 +9,6 @@ An intelligent PC builder that generates personalized, fully compatible builds b
 - **Compatibility checks** - socket mismatches and PSU warnings caught automatically
 - **Save & load builds** - multiple builds per account, rename and swap parts anytime
 - **Related YouTube guides** - fetched per saved build so the content is actually relevant
-
----
 
 ## Stack
 
